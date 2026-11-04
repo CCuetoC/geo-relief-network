@@ -5,28 +5,28 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: oklch(0.99 0.01 90);
-  --foreground: oklch(0.22 0.02 260);
+  --background: #f8fafc;
+  --foreground: #0f172a;
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.02 260);
-  --border: oklch(0.91 0.01 260);
-  --muted: oklch(0.95 0.01 260);
-  --muted-foreground: oklch(0.5 0.02 260);
-  --primary: oklch(0.48 0.12 165);
-  --primary-foreground: oklch(0.99 0.01 90);
+  --card-foreground: #0f172a;
+  --border: #e2e8f0;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --primary: #0064E0;
+  --primary-foreground: #ffffff;
   --radius: 0.75rem;
 }
 
 .dark {
-  --background: oklch(0.18 0.02 260);
-  --foreground: oklch(0.96 0.01 90);
+  --background: #0f172a;
+  --foreground: #f8fafc;
   --card: oklch(0.22 0.02 260);
-  --card-foreground: oklch(0.96 0.01 90);
-  --border: oklch(0.32 0.02 260);
-  --muted: oklch(0.27 0.02 260);
-  --muted-foreground: oklch(0.72 0.02 260);
-  --primary: oklch(0.72 0.13 165);
-  --primary-foreground: oklch(0.18 0.02 260);
+  --card-foreground: #f8fafc;
+  --border: #334155;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --primary: #0064E0;
+  --primary-foreground: #ffffff;
 }
 
 @theme inline {

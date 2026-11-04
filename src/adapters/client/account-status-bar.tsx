@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { LogIn, LogOut, UserRound } from "lucide-react";
 import { authClient } from "@/adapters/client/neon-auth";
 import { LanguageSelector } from "@/adapters/client/language-selector";
@@ -71,11 +70,7 @@ export function AccountStatusBar() {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
-      <div className="mx-auto flex min-h-14 w-full max-w-[1440px] items-center justify-between gap-3 px-4 py-2 sm:px-8">
-        <Link href="/" className="shrink-0 text-sm font-semibold tracking-tight sm:text-base">{t("brand.short")}</Link>
-
-        <div className="flex min-w-0 items-center justify-end gap-2 sm:gap-3">
+    <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3 lg:w-auto">
           <LanguageSelector />
           {sessionState === "loading" && <span className="hidden text-xs text-muted-foreground sm:inline">{t("auth.loading")}</span>}
 
@@ -84,14 +79,14 @@ export function AccountStatusBar() {
               <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground" aria-hidden="true">
                 <UserRound className="size-4" />
               </span>
-              <span className="min-w-0 max-w-[42vw] sm:max-w-[22rem]">
-                <span className="hidden text-[11px] leading-4 text-muted-foreground sm:block">{t("auth.active")}</span>
+              <span className="min-w-0 max-w-[32vw] sm:max-w-[22rem]">
+                <span className="hidden text-[11px] leading-4 text-slate-500 sm:block">{t("auth.active")}</span>
                 <span className="block truncate text-xs font-medium sm:text-sm" title={`${account.name} · ${account.email}`}>
                   <span className="sm:hidden">{account.email}</span>
                   <span className="hidden sm:inline">{account.name} · {account.email}</span>
                 </span>
               </span>
-              <button type="button" onClick={() => void signOut()} disabled={busy} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-2 text-xs font-medium hover:bg-muted disabled:opacity-50 sm:px-3 sm:text-sm">
+              <button type="button" onClick={() => void signOut()} disabled={busy} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium hover:bg-slate-50 disabled:opacity-50 sm:px-3 sm:text-sm">
                 <LogOut className="size-4" />
                 <span>{t("auth.signOut")}</span>
               </button>
@@ -100,7 +95,7 @@ export function AccountStatusBar() {
 
           {sessionState === "signed-out" && (
             <div className="flex items-center gap-2">
-              <span className="hidden text-xs text-muted-foreground sm:inline">{t("auth.signedOut")}</span>
+              <span className="hidden text-xs text-slate-500 sm:inline">{t("auth.signedOut")}</span>
               <button type="button" onClick={() => void signIn()} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 sm:text-sm">
                 <LogIn className="size-4" />
                 <span>{t("auth.signIn")}</span>
@@ -109,13 +104,11 @@ export function AccountStatusBar() {
           )}
 
           {sessionState === "error" && (
-            <button type="button" onClick={() => void refreshSession()} className="rounded-lg border px-3 py-2 text-xs font-medium hover:bg-muted sm:text-sm">
+            <button type="button" onClick={() => void refreshSession()} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium hover:bg-slate-50 sm:text-sm">
               {t("auth.retry")}
             </button>
           )}
-        </div>
-      </div>
-      {notice && <p role="status" className="mx-auto w-full max-w-[1440px] px-4 pb-2 text-right text-xs text-red-700 sm:px-8">{notice}</p>}
-    </header>
+      {notice && <p role="status" className="w-full text-right text-xs text-rose-700">{notice}</p>}
+    </div>
   );
 }

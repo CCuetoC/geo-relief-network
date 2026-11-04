@@ -8,16 +8,12 @@ export default function HomePage() {
   const { t } = useI18n();
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-[1440px] flex-col gap-9 px-4 py-6 sm:px-8 sm:py-10">
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b pb-5">
+      <section className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">{t("brand.descriptive")}</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">{t("brand.short")}</h1>
         </div>
-        <nav aria-label={t("nav.actions")} className="flex flex-wrap gap-2 text-sm">
-          <Link href="/chat" className="rounded-xl bg-primary px-4 py-2.5 font-medium text-primary-foreground">{t("nav.chat")}</Link>
-          <Link href="/manager" className="rounded-xl border bg-card px-4 py-2.5 font-medium hover:bg-muted">{t("nav.manager")}</Link>
-        </nav>
-      </header>
+      </section>
 
       <PublicMap />
 

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { cookies, headers } from "next/headers";
-import { AccountStatusBar } from "@/adapters/client/account-status-bar";
+import { AppNav } from "@/adapters/client/app-nav";
 import { I18nProvider } from "@/adapters/client/i18n-provider";
 import { LOCALE_COOKIE, resolveLocale } from "@/i18n/locale";
 import "./globals.css";
@@ -27,7 +27,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     <html lang={locale}>
       <body>
         <I18nProvider locale={locale}>
-          <AccountStatusBar />
+          <AppNav />
           {children}
         </I18nProvider>
       </body>
