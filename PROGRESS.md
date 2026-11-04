@@ -1,7 +1,7 @@
 # Geo Relief Network — estado verificable
 
-**Corte de auditoría:** 2026-11-03 (America/Lima)
-**Alcance:** worktree local en `main`. Hay cambios locales sin commit. No se cambió de rama, no hubo commit/push y no se desplegó.
+**Corte de auditoría:** 2026-11-04 (America/Lima)
+**Alcance:** el worktree local continúa en `main` con cambios no registrados en su historial local. Se publicó una copia de trabajo en una rama separada de GitHub para Vercel Preview; la rama `main` y la producción no cambiaron. No se aplicó una migración de base de datos en este paso.
 **Criterio:** `DONE` requiere evidencia verificable; `PARTIAL` significa que existe código, pero no está conectado o probado por completo; `NOT STARTED` indica que no existe implementación; `DIVERGED` indica una diferencia intencional o accidental respecto de `SPEC.md`. Un ADR o un archivo existente no demuestra por sí solo que una capacidad funcione.
 
 ## 1. Salud técnica actual (build & checks)
