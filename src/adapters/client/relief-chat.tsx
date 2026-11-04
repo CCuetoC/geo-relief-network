@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ArrowUp, MapPin, MessageCircle, Sparkles } from "lucide-react";
 import { authClient } from "@/adapters/client/neon-auth";
 import type { ConversationActionOption, ConversationOutput } from "@/domain/types";
 import { useI18n } from "@/adapters/client/i18n-provider";
@@ -196,47 +197,72 @@ export function ReliefChat() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-5 px-4 py-6 sm:px-8 sm:py-10">
+    <main className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-4xl flex-col gap-5 px-4 py-5 sm:px-8 sm:py-8">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-muted-foreground">{t("brand.short")}</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">{t("chat.title")}</h1>
-          <p className="mt-2 max-w-xl text-sm text-muted-foreground">{t("chat.intro")}</p>
+          <p className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 shadow-sm">
+            <Sparkles className="size-3.5 text-[#0064E0]" aria-hidden="true" />{t("brand.short")}
+          </p>
+          <h1 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">{t("chat.title")}</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{t("chat.intro")}</p>
         </div>
       </header>
 
-      <section aria-label={t("chat.conversation")} className="flex min-h-[45vh] flex-col gap-3 rounded-2xl border bg-card p-3 sm:p-5">
+      <section aria-label={t("chat.conversation")} className="flex min-h-[48vh] flex-col gap-4 rounded-3xl border border-slate-200/80 bg-white p-3 shadow-sm sm:p-5">
+        <div className="flex items-center justify-between border-b border-slate-100 px-1 pb-3">
+          <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800">
+            <MessageCircle className="size-4 text-[#0064E0]" aria-hidden="true" />{t("chat.conversation")}
+          </h2>
+          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-800">{t("chat.ready")}</span>
+        </div>
         {messages.length === 0 ? <div className="my-auto space-y-2 py-10 text-center text-sm text-muted-foreground">
           <p>{t("chat.examples")}</p><p>{t("chat.exampleRequest")}</p><p>{t("chat.exampleDonation")}</p>
-        </div> : messages.map((message, index) => <article key={String(index) + "-" + message.role} className={"max-w-[92%] rounded-xl px-4 py-3 text-sm " + (message.role === "user" ? "ml-auto bg-primary text-primary-foreground" : "mr-auto bg-muted")}>
+        </div> : messages.map((message, index) => <article key={String(index) + "-" + message.role} className={"max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm sm:px-5 " + (message.role === "user" ? "ml-auto bg-[#0064E0] text-white" : "mr-auto border border-slate-200 bg-white text-slate-800")}>
           <p className="whitespace-pre-wrap">{message.text}</p>
-          {message.output?.recommendation && <div className="mt-3 rounded-lg border bg-card p-3 text-card-foreground">
-            <p className="font-semibold">{message.output.recommendation.name}</p>
-            <p>{message.output.recommendation.neighborhood}{message.output.recommendation.distanceKm === null ? "" : " · " + t("map.distance", { distance: new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(message.output.recommendation.distanceKm) })}</p>
-            <ul className="mt-2 list-disc pl-5 text-xs">{message.output.recommendation.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+          {message.output?.recommendation && <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-800">
+            <p className="inline-flex items-center gap-1.5 font-semibold"><MapPin className="size-4 text-[#0064E0]" aria-hidden="true" />{message.output.recommendation.name}</p>
+            <p className="mt-1 text-xs text-slate-600">{message.output.recommendation.neighborhood}{message.output.recommendation.distanceKm === null ? "" : " · " + t("map.distance", { distance: new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(message.output.recommendation.distanceKm) })}</p>
+            <ul className="mt-2 list-disc pl-5 text-xs leading-5 text-slate-600">{message.output.recommendation.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
           </div>}
-          {message.output?.actionOptions?.map((option) => <button key={option.draftId} disabled={busy} onClick={() => confirm(option)} className="mt-3 block w-full rounded-lg bg-primary px-3 py-2 text-left font-medium text-primary-foreground disabled:opacity-50">
-            <span className="block">{option.label}</span><span className="mt-1 block text-xs font-normal opacity-90">{option.summary}</span>
-          </button>)}
+          {message.output?.actionOptions?.map((option) => <div key={option.draftId} className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{t("chat.dispatchTicket")}</p>
+                <p className="mt-1 font-semibold">{option.label}</p>
+              </div>
+              <code className="max-w-full break-all rounded-md border border-slate-200 bg-white px-2 py-1 font-mono text-[10px] text-slate-600">{option.draftId}</code>
+            </div>
+            <div className="space-y-3 p-4">
+              {message.output?.recommendation && <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">{t("chat.collectionHub")}</p>
+                <p className="mt-1 font-semibold">{message.output.recommendation.name}</p>
+                <p className="text-xs text-slate-600">{message.output.recommendation.neighborhood}</p>
+              </div>}
+              <p className="rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-700">{option.summary}</p>
+              <button type="button" disabled={busy} onClick={() => confirm(option)} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[#0064E0] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#0057C2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0064E0] focus-visible:ring-offset-2 disabled:opacity-50">
+                {t("chat.reviewAction")}
+              </button>
+            </div>
+          </div>)}
         </article>)}
-        {busy && <p className="mr-auto rounded-xl bg-muted px-4 py-3 text-sm text-muted-foreground">{t("chat.processing")}</p>}
+        {busy && <p className="mr-auto rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">{t("chat.processing")}</p>}
       </section>
 
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <label className="cursor-pointer rounded-lg border px-3 py-2 hover:bg-muted">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+        <label className="cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-medium shadow-sm transition-colors hover:bg-slate-50">
           {t("chat.attachPhotos", { count: formatNumber(locale, photoIds.length) })}
           <input type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" onChange={(event) => { void uploadPhotos(event.target.files); event.currentTarget.value = ""; }} />
         </label>
-        <label className="cursor-pointer rounded-lg border px-3 py-2 hover:bg-muted">
+        <label className="cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-medium shadow-sm transition-colors hover:bg-slate-50">
           {t("chat.sendAudio")}
           <input type="file" accept="audio/wav,audio/x-wav,audio/mpeg,audio/mp3,.wav,.mp3" className="sr-only" onChange={(event) => { const audio = event.target.files?.[0]; if (audio) void sendMessage("", undefined, audio); event.currentTarget.value = ""; }} />
         </label>
-        <button onClick={() => void shareLocation()} className="rounded-lg border px-3 py-2 hover:bg-muted">{t("chat.sharePin")}</button>
-        {photoIds.length > 0 && <button onClick={() => setPhotoIds([])} className="rounded-lg px-2 py-2 underline">{t("chat.removePhotos")}</button>}
+        <button onClick={() => void shareLocation()} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-medium shadow-sm transition-colors hover:bg-slate-50">{t("chat.sharePin")}</button>
+        {photoIds.length > 0 && <button onClick={() => setPhotoIds([])} className="rounded-lg px-2 py-2 font-medium text-slate-600 underline underline-offset-4">{t("chat.removePhotos")}</button>}
       </div>
 
-      {signedIn && <section className="rounded-xl border bg-card p-4 text-sm">
-        <h2 className="font-medium">{t("chat.linkWhatsApp")}</h2>
+      {signedIn && <section className="rounded-2xl border border-slate-200/80 bg-white p-4 text-sm shadow-sm sm:p-5">
+        <h2 className="font-semibold text-slate-900">{t("chat.linkWhatsApp")}</h2>
         {whatsappLinked ? <div className="mt-2 flex flex-wrap items-center justify-between gap-3"><p className="text-muted-foreground">{t("chat.linkedNumber")}</p><button type="button" onClick={() => void unlinkWhatsApp()} className="rounded-lg border px-3 py-2">{t("chat.unlink")}</button></div> : <>
         <label className="mt-2 flex items-start gap-2 text-muted-foreground">
           <input type="checkbox" checked={whatsappConsent} onChange={(event) => setWhatsappConsent(event.target.checked)} />
@@ -247,24 +273,31 @@ export function ReliefChat() {
         </>}
       </section>}
 
-      <form onSubmit={(event) => { event.preventDefault(); void sendMessage(text); }} className="flex gap-2">
-        <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder={t("chat.messagePlaceholder")} rows={2} maxLength={6000} className="min-h-12 flex-1 resize-y rounded-xl border bg-card px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary" />
-        <button disabled={busy || !text.trim()} className="self-end rounded-xl bg-primary px-4 py-3 text-sm font-medium text-primary-foreground disabled:opacity-50">{t("chat.send")}</button>
+      <form onSubmit={(event) => { event.preventDefault(); void sendMessage(text); }} className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+        <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder={t("chat.messagePlaceholder")} rows={2} maxLength={6000} className="min-h-12 flex-1 resize-y rounded-xl bg-transparent px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-[#0064E0]" />
+        <button disabled={busy || !text.trim()} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl bg-[#0064E0] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#0057C2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0064E0] focus-visible:ring-offset-2 disabled:opacity-50"><span>{t("chat.send")}</span><ArrowUp className="size-4" aria-hidden="true" /></button>
       </form>
       {pendingConfirmation && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onKeyDown={(event) => { if (event.key === "Escape") setPendingConfirmation(null); }}>
-        <section role="alertdialog" aria-modal="true" aria-labelledby="action-confirmation-title" aria-describedby="action-confirmation-summary" className="w-full max-w-lg space-y-4 rounded-2xl border bg-card p-5 text-card-foreground shadow-xl">
-          <div>
-            <h2 id="action-confirmation-title" className="text-lg font-semibold">{t("chat.confirmTitle")}</h2>
-            <p id="action-confirmation-summary" className="mt-2 text-sm">{pendingConfirmation.summary}</p>
-            <p className="mt-3 text-xs text-muted-foreground">{t("chat.confirmDescription")}</p>
+        <section role="alertdialog" aria-modal="true" aria-labelledby="action-confirmation-title" aria-describedby="action-confirmation-summary" className="w-full max-w-lg overflow-hidden rounded-3xl border border-slate-200 bg-white text-slate-900 shadow-2xl">
+          <div className="border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{t("chat.dispatchTicket")}</p>
+            <h2 id="action-confirmation-title" className="mt-1 text-lg font-semibold">{t("chat.confirmTitle")}</h2>
           </div>
-          <div className="flex justify-end gap-2">
-            <button type="button" disabled={busy} onClick={() => setPendingConfirmation(null)} className="rounded-lg border px-4 py-2 text-sm font-medium disabled:opacity-50">{t("chat.cancel")}</button>
-            <button type="button" disabled={busy} onClick={() => {
+          <div className="space-y-4 p-5 sm:p-6">
+            <p id="action-confirmation-summary" className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6">{pendingConfirmation.summary}</p>
+            <div className="rounded-xl border border-slate-200 px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">{t("chat.actionId")}</p>
+              <code className="mt-1 block break-all font-mono text-xs text-slate-700">{pendingConfirmation.draftId}</code>
+            </div>
+            <p className="text-xs leading-5 text-slate-600">{t("chat.confirmDescription")}</p>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" disabled={busy} onClick={() => setPendingConfirmation(null)} className="min-h-11 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50">{t("chat.cancel")}</button>
+              <button type="button" disabled={busy} onClick={() => {
               const option = pendingConfirmation;
               setPendingConfirmation(null);
               void sendMessage("", option.draftId);
-            }} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">{t("chat.confirmAction")}</button>
+              }} className="min-h-11 rounded-xl bg-[#0064E0] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#0057C2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0064E0] focus-visible:ring-offset-2 disabled:opacity-50">{t("chat.confirmAction")}</button>
+            </div>
           </div>
         </section>
       </div>}
