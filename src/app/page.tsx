@@ -1,41 +1,25 @@
+"use client";
+
 import Link from "next/link";
+import { PublicMap } from "@/adapters/client/public-map";
+import { useI18n } from "@/adapters/client/i18n-provider";
 
 export default function HomePage() {
+  const { t } = useI18n();
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-10 px-5 py-12 sm:px-8">
-      <header className="space-y-3">
-        <p className="text-sm font-medium text-muted-foreground">
-          Red Geoespacial de Respuesta Vecinal
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-          Geo Relief Network
-        </h1>
-        <p className="max-w-2xl text-base text-muted-foreground">
-          Scaffolding del producto. El mapa, la conversación y los flujos operativos
-          se implementarán después de revisar esta base.
-        </p>
-      </header>
+    <main className="mx-auto flex min-h-screen w-full max-w-[1440px] flex-col gap-9 px-4 py-6 sm:px-8 sm:py-10">
+      <PublicMap />
 
-      <section aria-labelledby="map-title" className="space-y-3">
-        <h2 id="map-title" className="text-xl font-semibold">
-          Mapa y consulta pública
-        </h2>
-        <div className="rounded-xl border border-dashed bg-card p-6 text-sm text-muted-foreground">
-          Área reservada para el mapa de puntos de acopio y el chat público.
+      <section aria-labelledby="workflow-title" className="grid gap-4 rounded-2xl border bg-card p-5 sm:grid-cols-[1fr_auto] sm:items-center sm:p-6">
+        <div>
+          <h2 id="workflow-title" className="text-lg font-semibold">{t("home.workflowTitle")}</h2>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{t("home.workflowBody")}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/donate" className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted">{t("home.prepareDonation")}</Link>
+          <Link href="/request" className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted">{t("home.requestHelp")}</Link>
         </div>
       </section>
-
-      <nav aria-label="Vistas de scaffolding" className="flex flex-wrap gap-4 text-sm">
-        <Link className="underline underline-offset-4" href="/donate">
-          Vista de donante
-        </Link>
-        <Link className="underline underline-offset-4" href="/request">
-          Vista de solicitante
-        </Link>
-        <Link className="underline underline-offset-4" href="/manager">
-          Vista de encargado
-        </Link>
-      </nav>
     </main>
   );
 }

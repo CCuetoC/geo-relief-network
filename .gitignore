@@ -5,6 +5,7 @@ build/
 dist/
 coverage/
 .vercel/
+video-demo/
 .turbo/
 *.tsbuildinfo
 npm-debug.log*
