@@ -9,7 +9,7 @@ export interface PrivateObjectStorageConfig {
   private: true;
 }
 
-/** Configuration boundary only; uploads and signed URLs are not implemented yet. */
+/** Private object-storage credentials; import this module only from server code. */
 export function getPrivateObjectStorageConfig(): PrivateObjectStorageConfig {
   return {
     endpoint: requireServerEnv("AWS_ENDPOINT_URL_S3"),

@@ -1,4 +1,6 @@
-/** Browser-side contract only. A client is initialized after the branch Auth URL is provisioned. */
-export interface NeonAuthBrowserConfig {
-  baseUrl: string;
-}
+"use client";
+
+import { createAuthClient } from "@neondatabase/auth/next";
+
+/** Browser client uses the same-origin Next.js proxy; no auth URL or secret is exposed. */
+export const authClient = createAuthClient();

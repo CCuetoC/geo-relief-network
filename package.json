@@ -10,9 +10,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "db:migrate": "node --env-file=.env.local scripts/migrate.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/run-node-tests.mjs all",
+    "test:unit": "node scripts/run-node-tests.mjs unit",
+    "test:integration": "node scripts/run-node-tests.mjs integration"
   },
   "dependencies": {
+    "@neondatabase/auth": "^0.6.0-beta",
     "@neondatabase/serverless": "^1.2.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -31,6 +36,7 @@
     "@types/react-dom": "^19.3.0",
     "postcss": "^8.5.32",
     "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }
