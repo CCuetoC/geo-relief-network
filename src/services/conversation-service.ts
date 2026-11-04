@@ -6,6 +6,7 @@ import type {
   ConversationMissingField,
   ConversationOutput,
   ConversationState,
+  Locale,
   ProductLineDraft,
 } from "@/domain/types";
 import { queryRows } from "@/core/server/db";
@@ -16,6 +17,8 @@ import { getActiveCatalog, resolveCatalogItems, suggestForHousehold } from "@/se
 import type { CollectionPointReadService, ConversationContextRepository, ConversationService, StructuredTurnExtractor } from "@/services/contracts";
 import type { AidDraftPayload, ManifestDraftPayload, WaitlistConfirmationDraftPayload } from "@/services/action-execution";
 import { findPendingWaitlistOffer } from "@/services/queue-service";
+import { DEFAULT_LOCALE, formatTime } from "@/i18n/locale";
+import { translate } from "@/i18n/messages";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -47,30 +50,29 @@ function missingSlots(state: ConversationState): ConversationMissingField[] {
   return missing;
 }
 
-function followUp(missing: ConversationMissingField[], state: ConversationState, suggested?: Array<{ productName: string; quantity: number; unit: string }>) {
-  if (missing.includes("intent")) return "¿Quieres donar productos o solicitar ayuda? Puedo orientarte con los puntos cercanos.";
+function followUp(missing: ConversationMissingField[], state: ConversationState, locale: Locale, suggested?: Array<{ productName: string; quantity: number; unit: string }>) {
+  if (missing.includes("intent")) return translate(locale, "conversation.askIntent");
   const parts: string[] = [];
   if (missing.includes("products")) {
     if (state.intent === "REQUEST_AID" && state.householdSize && suggested?.length) {
-      parts.push(`Para un hogar de ${state.householdSize}, el catálogo sugiere como referencia ${suggested.map((item) => `${item.quantity} ${item.unit} de ${item.productName}`).join(", ")}. ¿Qué productos y cantidades quieres pedir?`);
+      parts.push(translate(locale, "conversation.householdSuggestion", {
+        size: state.householdSize,
+        items: suggested.map((item) => `${number(locale, item.quantity)} ${item.unit} ${locale === "en" ? "of" : "de"} ${item.productName}`).join(", "),
+      }));
     } else if (state.intent === "REQUEST_AID") {
-      parts.push("¿Qué productos y cantidades necesitas? Si prefieres, dime cuántas personas viven en tu hogar y te muestro sugerencias del catálogo; tú eliges qué pedir.");
+      parts.push(translate(locale, "conversation.askRequestProducts"));
     } else {
-      parts.push("¿Qué productos ya separados vas a donar y en qué cantidades?");
+      parts.push(translate(locale, "conversation.askDonationProducts"));
     }
   }
-  if (missing.includes("zone")) parts.push("¿En qué barrio o distrito estás? Puedes compartir una ubicación aproximada o un pin para calcular distancia.");
-  if (missing.includes("mobility")) parts.push("¿Solo puedes acercarte a un punto cercano o puedes desplazarte a otros puntos?");
-  if (missing.includes("availability_window")) parts.push("¿En qué horario de hoy podrías recoger? Indica una ventana, por ejemplo 15:00–17:00.");
-  if (missing.includes("donor_preference")) parts.push("¿Prefieres el punto más cercano o el punto con mayor déficit para esos productos?");
-  if (missing.includes("pre_sorted")) parts.push("Antes de generar el manifiesto, confirma que llevarás los productos separados y listos para cotejo.");
-  if (missing.includes("estimated_delivery_time")) parts.push("¿A qué hora estimas entregar hoy? Es una referencia para distribuir las llegadas; puedes acercarte en cualquier momento mientras el punto esté abierto.");
-  if (missing.includes("photos")) parts.push("Adjunta una foto privada por cada producto que vas a entregar; se usará solo como evidencia para el encargado.");
+  if (missing.includes("zone")) parts.push(translate(locale, "conversation.askZone"));
+  if (missing.includes("mobility")) parts.push(translate(locale, "conversation.askMobility"));
+  if (missing.includes("availability_window")) parts.push(translate(locale, "conversation.askAvailability"));
+  if (missing.includes("donor_preference")) parts.push(translate(locale, "conversation.askDonorPreference"));
+  if (missing.includes("pre_sorted")) parts.push(translate(locale, "conversation.askPreSorted"));
+  if (missing.includes("estimated_delivery_time")) parts.push(translate(locale, "conversation.askEstimatedDelivery"));
+  if (missing.includes("photos")) parts.push(translate(locale, "conversation.askPhotos"));
   return parts.join(" ");
-}
-
-function normalized(value: string) {
-  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es").trim();
 }
 
 function attachPhotos(items: ProductLineDraft[], mediaIds: string[]) {
@@ -78,8 +80,14 @@ function attachPhotos(items: ProductLineDraft[], mediaIds: string[]) {
   return items.map((item, index) => ({ ...item, photoMediaIds: mediaIds[index] ? [mediaIds[index]] : [] }));
 }
 
-function humanDistance(point: CollectionPointRecommendation) {
-  return point.distanceKm === null ? "distancia no calculable sin pin" : `${point.distanceKm.toFixed(1)} km en distancia directa`;
+function number(locale: Locale, value: number) {
+  return new Intl.NumberFormat(locale).format(value);
+}
+
+function humanDistance(point: CollectionPointRecommendation, locale: Locale) {
+  return point.distanceKm === null
+    ? translate(locale, "map.distanceNoPin")
+    : translate(locale, "map.distance", { distance: new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(point.distanceKm) });
 }
 
 export class NeonConversationService implements ConversationService {
@@ -90,20 +98,29 @@ export class NeonConversationService implements ConversationService {
   ) {}
 
   async respond(input: ConversationInput): Promise<ConversationOutput> {
+    const output = await this.respondInternal(input);
+    const state = await this.contexts.load(input.conversationId, input.actorId).catch(() => null);
+    return { ...output, locale: output.locale ?? state?.locale ?? input.locale ?? DEFAULT_LOCALE };
+  }
+
+  private async respondInternal(input: ConversationInput): Promise<ConversationOutput> {
+    let locale = input.locale ?? DEFAULT_LOCALE;
     if (!uuidPattern.test(input.conversationId)) {
-      return { conversationId: input.conversationId, phase: "ERROR", text: "No pude iniciar esta conversación. Actualiza la página y vuelve a intentarlo." };
+      return { conversationId: input.conversationId, locale, phase: "ERROR", text: translate(locale, "conversation.startError") };
     }
     if (input.confirmationDraftId) return this.confirm(input);
     if (!input.text?.trim() && !input.audio && !input.photoMediaIds?.length) {
-      return { conversationId: input.conversationId, phase: "CAPTURING", text: "Escribe un mensaje o envía una nota de voz para comenzar." };
+      return { conversationId: input.conversationId, locale, phase: "CAPTURING", text: translate(locale, "conversation.startPrompt") };
     }
 
     const prior = await this.contexts.load(input.conversationId, input.actorId);
+    locale = input.channel === "WEB" ? input.locale ?? prior?.locale ?? DEFAULT_LOCALE : input.locale ?? prior?.locale ?? DEFAULT_LOCALE;
     let state: ConversationState = prior ?? {};
     if (!prior && input.actorId) {
-      const pendingOffer = await findPendingWaitlistOffer(input.actorId);
+      const pendingOffer = await findPendingWaitlistOffer(input.actorId, locale);
       if (pendingOffer) {
         state = {
+          locale,
           intent: "REQUEST_AID",
           items: [{ productName: pendingOffer.product_name, quantity: Number(pendingOffer.quantity) }],
           zone: pendingOffer.zone,
@@ -116,43 +133,50 @@ export class NeonConversationService implements ConversationService {
       ? await getOwnedPrivateMedia(input.actorId, input.photoMediaIds)
       : [];
     if (input.photoMediaIds?.length && incomingMedia.length !== new Set(input.photoMediaIds).size) {
-      return { conversationId: input.conversationId, phase: "ERROR", text: "No pude validar una de las fotos privadas. Vuelve a adjuntarla." };
+      return { conversationId: input.conversationId, locale, phase: "ERROR", text: translate(locale, "conversation.photoError") };
     }
     const allMediaIds = [...new Set([...(state.photoMediaIds ?? []), ...incomingMedia.map((media) => media.id)])];
     const baseState: ConversationState = {
       ...state,
+      locale,
       photoMediaIds: allMediaIds,
     };
 
     let extracted: ConversationState & { cancel?: boolean };
     try {
+      const catalog = await getActiveCatalog(locale);
       extracted = await this.extractor.extract({
         text: input.text,
         audio: input.audio,
         state: baseState,
         photoAttached: allMediaIds.length > 0,
+        locale,
+        catalog: catalog.map((product) => ({ slug: product.slug, name: product.name, aliases: product.aliases })),
       });
+      locale = input.channel === "WEB" ? input.locale ?? DEFAULT_LOCALE : extracted.locale ?? locale;
     } catch (error) {
       const audioOnly = Boolean(input.audio && !input.text?.trim());
       return {
         conversationId: input.conversationId,
+        locale,
         phase: "CAPTURING",
         text: audioOnly
-          ? "No pude entender esa nota de voz. Envíala en MP3 o WAV, o escríbeme el mensaje."
-          : "No pude procesar el mensaje ahora. Inténtalo de nuevo; no se registró ninguna solicitud ni manifiesto.",
+          ? translate(locale, "conversation.audioError")
+          : translate(locale, "conversation.processingError"),
       };
     }
 
     if (extracted.cancel) {
       await this.contexts.delete(input.conversationId, input.actorId);
       if (input.actorId) await cancelPendingActionDrafts(input.conversationId, input.actorId);
-      return { conversationId: input.conversationId, phase: "COMPLETED", text: "Listo, cerré este flujo. No se creó ninguna solicitud ni manifiesto." };
+      return { conversationId: input.conversationId, locale, phase: "COMPLETED", text: translate(locale, "conversation.cancelled") };
     }
 
     if (state.intent && extracted.intent && state.intent !== extracted.intent) {
       if (input.actorId) await cancelPendingActionDrafts(input.conversationId, input.actorId);
       await this.contexts.delete(input.conversationId, input.actorId);
       state = {
+        locale,
         intent: extracted.intent,
         draftGroupId: randomUUID(),
         photoMediaIds: extracted.intent === "DONATE" ? incomingMedia.map((media) => media.id) : [],
@@ -161,8 +185,9 @@ export class NeonConversationService implements ConversationService {
       const missing = missingSlots(state);
       return {
         conversationId: input.conversationId,
+        locale,
         phase: "CAPTURING",
-        text: `Cambié el flujo a ${state.intent === "DONATE" ? "donación" : "solicitud de ayuda"}. ${followUp(missing, state)}`,
+        text: `${translate(locale, state.intent === "DONATE" ? "conversation.changedToDonation" : "conversation.changedToRequest")} ${followUp(missing, state, locale)}`,
         missingFields: missing,
       };
     }
@@ -170,6 +195,7 @@ export class NeonConversationService implements ConversationService {
     state = {
       ...baseState,
       ...extracted,
+      locale,
       photoMediaIds: allMediaIds,
       draftGroupId: state.draftGroupId,
     };
@@ -181,13 +207,14 @@ export class NeonConversationService implements ConversationService {
     const missing = missingSlots(state);
     if (missing.length) {
       const catalog = state.intent === "REQUEST_AID" && state.householdSize && !state.items?.length
-        ? await getActiveCatalog()
+        ? await getActiveCatalog(locale)
         : [];
       const suggestions = state.householdSize ? suggestForHousehold(catalog, state.householdSize) : [];
       return {
         conversationId: input.conversationId,
+        locale,
         phase: "CAPTURING",
-        text: followUp(missing, state, suggestions),
+        text: followUp(missing, state, locale, suggestions),
         missingFields: missing,
         audioTranscribed: Boolean(input.audio),
       };
@@ -196,16 +223,17 @@ export class NeonConversationService implements ConversationService {
   }
 
   private async confirm(input: ConversationInput): Promise<ConversationOutput> {
+    const locale = input.locale ?? (await this.contexts.load(input.conversationId, input.actorId))?.locale ?? DEFAULT_LOCALE;
     if (!input.actorId) {
-      return { conversationId: input.conversationId, phase: "NEEDS_AUTH", text: "Inicia sesión con Google para confirmar esta acción." };
+      return { conversationId: input.conversationId, locale, phase: "NEEDS_AUTH", text: translate(locale, "conversation.login") };
     }
     const token = input.confirmationDraftId!;
     const result = await executeConfirmedAction(token, input.actorId);
     if (result.status === "NOT_FOUND" || result.status === "ALREADY_USED") {
-      return { conversationId: input.conversationId, phase: "ERROR", text: "Este borrador no existe, ya se usó o pertenece a otra sesión. No hice cambios." };
+      return { conversationId: input.conversationId, locale, phase: "ERROR", text: translate(locale, "conversation.draftInvalid") };
     }
     if (result.status === "EXPIRED") {
-      return { conversationId: input.conversationId, phase: "CAPTURING", text: "El borrador venció después de 30 minutos. Vuelve a revisar la disponibilidad para crear uno nuevo." };
+      return { conversationId: input.conversationId, locale, phase: "CAPTURING", text: translate(locale, "conversation.draftExpired") };
     }
     if (result.status === "STALE") {
       await markActionDraftStale(token, input.actorId);
@@ -217,49 +245,53 @@ export class NeonConversationService implements ConversationService {
           conversationId: input.conversationId,
           phase: "CAPTURING",
           missingFields: ["availability_window"],
-          text: "Cambió la disponibilidad del punto o el apartado está por vencer. Indica otra ventana de recojo de hoy; volveré a comprobar el turno antes de pedirte confirmación.",
+          locale,
+          text: translate(locale, "conversation.waitlistStale"),
           notificationOutboxIds: result.notificationOutboxIds,
         };
       }
       if (state) return { ...await this.buildPreview(input, state), notificationOutboxIds: result.notificationOutboxIds };
-      return { conversationId: input.conversationId, phase: "CAPTURING", text: "La disponibilidad cambió. Vuelve a enviar los datos para revisar un nuevo resumen.", notificationOutboxIds: result.notificationOutboxIds };
+      return { conversationId: input.conversationId, locale, phase: "CAPTURING", text: translate(locale, "conversation.availabilityChanged"), notificationOutboxIds: result.notificationOutboxIds };
     }
     if (result.status !== "COMPLETED") {
-      return { conversationId: input.conversationId, phase: "ERROR", text: "No pude confirmar el borrador. No se registró ninguna acción." };
+      return { conversationId: input.conversationId, locale, phase: "ERROR", text: translate(locale, "conversation.confirmError") };
     }
     if (result.actionType === "AID_REQUEST") {
-      const reserved = result.reservations.map((item) => `${item.quantity} ${item.productName} (código ${item.pickupCode})`).join(", ");
-      const waiting = result.waiting.map((item) => `${item.quantity} ${item.productName}`).join(", ");
-      const pieces = ["Solicitud registrada una sola vez."];
-      if (reserved) pieces.push(`Reserva activa para recoger hoy: ${reserved}.`);
-      if (waiting) pieces.push(`En cola FIFO, sin fecha prometida: ${waiting}.`);
-      if (!reserved && !waiting) pieces.push("No se generaron unidades reservadas ni pendientes.");
-      return { conversationId: input.conversationId, phase: "COMPLETED", text: pieces.join(" "), notificationOutboxIds: result.notificationOutboxIds };
+      const reserved = result.reservations.map((item) => `${number(locale, item.quantity)} ${item.productName} (${locale === "en" ? "code" : "código"} ${item.pickupCode})`).join(", ");
+      const waiting = result.waiting.map((item) => `${number(locale, item.quantity)} ${item.productName}`).join(", ");
+      const pieces = [translate(locale, "conversation.requestRegistered")];
+      if (reserved) pieces.push(`${translate(locale, "conversation.activeReservation", { items: reserved })}`);
+      if (waiting) pieces.push(`${translate(locale, "conversation.inWaitlist", { items: waiting })}`);
+      if (!reserved && !waiting) pieces.push(translate(locale, "conversation.noCommitments"));
+      return { conversationId: input.conversationId, locale, phase: "COMPLETED", text: pieces.join(" "), notificationOutboxIds: result.notificationOutboxIds };
     }
     if (result.actionType === "WAITLIST_CONFIRMATION") {
       return {
         conversationId: input.conversationId,
         phase: "COMPLETED",
-        text: `Turno confirmado: ${result.quantity} ${result.productName}. Tu código de recojo es ${result.pickupCode}; la reserva dura hasta el cierre de hoy.`,
+        locale,
+        text: translate(locale, "conversation.turnConfirmed", { quantity: number(locale, result.quantity), product: result.productName, code: result.pickupCode }),
         notificationOutboxIds: result.notificationOutboxIds,
       };
     }
     return {
       conversationId: input.conversationId,
       phase: "COMPLETED",
-      text: `Manifiesto ${result.code} creado como pendiente. El punto debe cotejar los productos físicamente; el stock no cambia hasta esa validación.`,
+      locale,
+      text: translate(locale, "conversation.manifestCreated", { code: result.code }),
       notificationOutboxIds: result.notificationOutboxIds,
     };
   }
 
   private async buildPreview(input: ConversationInput, state: ConversationState): Promise<ConversationOutput> {
+    const locale = input.locale ?? state.locale ?? DEFAULT_LOCALE;
     if (state.pendingWaitlistReservationId) {
       if (!input.actorId || !state.availabilityWindow) {
-        return { conversationId: input.conversationId, phase: "CAPTURING", text: "¿En qué horario de hoy puedes recoger lo que se te ofreció?" };
+        return { conversationId: input.conversationId, locale, phase: "CAPTURING", text: translate(locale, "conversation.askPickupTime") };
       }
-      const offer = await findPendingWaitlistOffer(input.actorId);
+      const offer = await findPendingWaitlistOffer(input.actorId, locale);
       if (!offer || offer.id !== state.pendingWaitlistReservationId) {
-        return { conversationId: input.conversationId, phase: "CAPTURING", text: "Ese apartado venció o dejó de estar disponible. Vuelve a consultar tu solicitud; no se creó una reserva." };
+        return { conversationId: input.conversationId, locale, phase: "CAPTURING", text: translate(locale, "conversation.offerExpired") };
       }
       const payload: WaitlistConfirmationDraftPayload = {
         reservationId: offer.id,
@@ -268,7 +300,14 @@ export class NeonConversationService implements ConversationService {
       const idempotencyKey = createHash("sha256")
         .update(`${input.actorId}:${offer.id}:${state.availabilityWindow.start}:${state.availabilityWindow.end}`)
         .digest("hex");
-      const summary = `${offer.quantity} ${offer.product_name} en ${offer.point_name}. Disponible para recoger hoy entre ${state.availabilityWindow.start} y ${state.availabilityWindow.end}; el apartado temporal vence ${new Date(offer.expires_at).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", timeZone: "America/Lima" })}. Al confirmar se generará un código y la reserva durará hasta el cierre del punto.`;
+      const summary = translate(locale, "conversation.offerSummary", {
+        quantity: number(locale, Number(offer.quantity)),
+        product: offer.product_name,
+        point: offer.point_name,
+        start: state.availabilityWindow.start,
+        end: state.availabilityWindow.end,
+        expires: formatTime(locale, offer.expires_at, offer.timezone),
+      });
       await cancelPendingActionDrafts(input.conversationId, input.actorId);
       const draft = await createActionDraft({
         actorId: input.actorId,
@@ -281,27 +320,29 @@ export class NeonConversationService implements ConversationService {
       return {
         conversationId: input.conversationId,
         phase: "PREVIEW",
-        text: "La cola FIFO apartó unidades temporalmente. Revisa el punto y el horario y confirma antes de que venza el apartado.",
-        actionOptions: [{ draftId: draft.draftId, label: "Confirmar turno", summary }],
+        locale,
+        text: translate(locale, "conversation.offerPreview"),
+        actionOptions: [{ draftId: draft.draftId, label: translate(locale, "conversation.confirmTurn"), summary }],
       };
     }
     if (!state.intent || !state.items?.length || !state.zone) {
-      return { conversationId: input.conversationId, phase: "CAPTURING", text: followUp(missingSlots(state), state) };
+      return { conversationId: input.conversationId, locale, phase: "CAPTURING", text: followUp(missingSlots(state), state, locale) };
     }
 
-    const resolved = await resolveCatalogItems(state.items);
+    const resolved = await resolveCatalogItems(state.items, locale);
     const unresolved = resolved.filter((entry) => !entry);
     if (unresolved.length) {
-      const catalog = await getActiveCatalog();
+      const catalog = await getActiveCatalog(locale);
       const unresolvedNames = resolved.flatMap((entry, index) => entry ? [] : [state.items![index].productName]);
       const names = catalog.map((product) => product.name).join(", ");
       return {
         conversationId: input.conversationId,
+        locale,
         phase: "CAPTURING",
         missingFields: ["products"],
         text: names
-          ? `No encontré ${unresolvedNames.join(", ")} en el catálogo habilitado. Elige productos de este catálogo: ${names}.`
-          : "El catálogo de productos aún no está configurado en este entorno. No puedo crear una solicitud ni un manifiesto todavía.",
+          ? translate(locale, "conversation.catalogNotFound", { products: unresolvedNames.join(", "), catalog: names })
+          : translate(locale, "conversation.catalogEmpty"),
       };
     }
     let items = resolved.map((entry) => ({ productId: entry!.product.id, productName: entry!.product.name, quantity: entry!.quantity }));
@@ -317,6 +358,7 @@ export class NeonConversationService implements ConversationService {
     const inputOrigin = validCoordinates(input.location);
     const mode = state.intent === "DONATE" ? "DONOR" : "AID_SEEKER";
     const recommendations = await this.points.recommend({
+      locale,
       zone: state.zone,
       origin: inputOrigin,
       items,
@@ -328,13 +370,13 @@ export class NeonConversationService implements ConversationService {
     });
     const point = recommendations[0];
     if (!point) {
-      const locationHint = inputOrigin ? "No encontré un punto activo que acepte esos productos, esté abierto y tenga capacidad para ese horario." : "No encontré un punto activo y compatible en esa zona y horario. Si puedes, comparte un pin de ubicación o elige que puedes desplazarte a otros puntos.";
-      return { conversationId: input.conversationId, phase: "CAPTURING", text: `${locationHint} No crearé una solicitud ni un manifiesto hasta que tengamos un punto adecuado.` };
+      const locationHint = translate(locale, inputOrigin ? "conversation.noPointPin" : "conversation.noPointZone");
+      return { conversationId: input.conversationId, locale, phase: "CAPTURING", text: `${locationHint} ${translate(locale, "conversation.noPointSuffix")}` };
     }
     const productRows = point.products;
     const capExceeded = productRows.find((row) => row.requestedQuantity > row.maxPerRequest);
     if (capExceeded && state.intent === "REQUEST_AID") {
-      return { conversationId: input.conversationId, phase: "CAPTURING", text: `El límite configurado para ${capExceeded.productName} en este punto es ${capExceeded.maxPerRequest}. Ajusta esa cantidad y la vuelvo a revisar.` };
+      return { conversationId: input.conversationId, locale, phase: "CAPTURING", text: translate(locale, "conversation.quantityLimit", { product: capExceeded.productName, limit: capExceeded.maxPerRequest }) };
     }
 
     if (state.intent === "REQUEST_AID") {
@@ -343,13 +385,14 @@ export class NeonConversationService implements ConversationService {
       );
       if (partialAvailability.length > 0) {
         const limits = partialAvailability
-          .map((row) => `${row.productName}: hay ${row.availableQuantity} de ${row.requestedQuantity} solicitadas`)
+          .map((row) => translate(locale, "conversation.partialItem", { product: row.productName, available: number(locale, row.availableQuantity), requested: number(locale, row.requestedQuantity) }))
           .join("; ");
         return {
           conversationId: input.conversationId,
+          locale,
           phase: "CAPTURING",
           missingFields: ["products"],
-          text: `En ${point.name}, ${limits}. No dividiré una misma solicitud entre reserva y cola. Ajusta cada cantidad al stock disponible para solicitarla ahora; si después necesitas el resto, envía otra solicitud separada y recibirá su propio turno FIFO. Todavía no se registró ninguna demanda.`,
+          text: translate(locale, "conversation.partialStock", { point: point.name, limits }),
           recommendation: point,
         };
       }
@@ -372,15 +415,26 @@ export class NeonConversationService implements ConversationService {
       } as const;
       const immediateSummary = primary
         .map((item) => item.reserveQuantity > 0
-          ? `${item.requestedQuantity} ${item.productName} para recoger hoy`
-          : `${item.requestedQuantity} ${item.productName} en cola FIFO, sin fecha prometida${productRows.find((row) => row.productId === item.productId)?.queuedRequestCount ? ", detrás de solicitudes anteriores" : ""}`)
+          ? translate(locale, "conversation.pickupItem", { quantity: number(locale, item.requestedQuantity), product: item.productName })
+          : translate(locale, "conversation.queueItem", {
+            quantity: number(locale, item.requestedQuantity),
+            product: item.productName,
+            priority: productRows.find((row) => row.productId === item.productId)?.queuedRequestCount ? translate(locale, "conversation.queuePriority") : "",
+          }))
         .join("; ");
-      const summary = `${point.name} (${humanDistance(point)}): ${immediateSummary}. Ventana de recojo: ${state.availabilityWindow!.start}–${state.availabilityWindow!.end}. Cada producto se reserva completo o espera completo.`;
+      const summary = translate(locale, "conversation.pickupSummary", {
+        point: point.name,
+        distance: humanDistance(point, locale),
+        items: immediateSummary,
+        start: state.availabilityWindow!.start,
+        end: state.availabilityWindow!.end,
+      });
       if (!input.actorId) {
         return {
           conversationId: input.conversationId,
+          locale,
           phase: "NEEDS_AUTH",
-          text: `Recomendación: ${point.name}, ${point.neighborhood}, ${humanDistance(point)}. ${point.reasons.join("; ")}. ${summary} Inicia sesión con Google para confirmar y registrar la solicitud.`,
+          text: translate(locale, "conversation.recommendation", { point: point.name, area: point.neighborhood, distance: humanDistance(point, locale), reasons: point.reasons.join("; "), summary }),
           recommendation: point,
         };
       }
@@ -408,17 +462,19 @@ export class NeonConversationService implements ConversationService {
       return {
         conversationId: input.conversationId,
         phase: "PREVIEW",
-        text: `La recomendación es ${point.name}, ${point.neighborhood}: ${point.reasons.join("; ")}. Revisa la solicitud y confirma; la disponibilidad y el turno FIFO se volverán a comprobar al confirmar.`,
+        locale,
+        text: translate(locale, "conversation.requestPreview", { point: point.name, area: point.neighborhood, reasons: point.reasons.join("; ") }),
         recommendation: point,
-        actionOptions: [{ draftId: draft.draftId, label: "Confirmar solicitud", summary }],
+        actionOptions: [{ draftId: draft.draftId, label: translate(locale, "conversation.confirmRequest"), summary }],
       };
     }
 
     if (!input.actorId) {
       return {
         conversationId: input.conversationId,
+        locale,
         phase: "NEEDS_AUTH",
-        text: `El punto recomendado es ${point.name}, ${point.neighborhood}, ${humanDistance(point)}: ${point.reasons.join("; ")}. Inicia sesión con Google para generar y confirmar el manifiesto.`,
+        text: translate(locale, "conversation.donationRecommendation", { point: point.name, area: point.neighborhood, distance: humanDistance(point, locale), reasons: point.reasons.join("; ") }),
         recommendation: point,
       };
     }
@@ -427,9 +483,10 @@ export class NeonConversationService implements ConversationService {
     if (ownedMedia.length < items.length) {
       return {
         conversationId: input.conversationId,
+        locale,
         phase: "CAPTURING",
         missingFields: ["photos"],
-        text: `Adjunta al menos una foto privada por cada producto. En tu mensaje hay ${items.length} productos y el sistema verificó ${ownedMedia.length} fotos. Las fotos no se procesan con IA.`,
+        text: translate(locale, "conversation.photoCount", { items: items.length, photos: ownedMedia.length }),
         recommendation: point,
       };
     }
@@ -440,7 +497,7 @@ export class NeonConversationService implements ConversationService {
       [point.id, state.estimatedDeliveryTime],
     );
     const estimatedDeliveryAt = instantRows[0]?.estimated_at;
-    if (!estimatedDeliveryAt) return { conversationId: input.conversationId, phase: "ERROR", text: "No pude calcular la hora del punto. No se creó ningún manifiesto." };
+    if (!estimatedDeliveryAt) return { conversationId: input.conversationId, locale, phase: "ERROR", text: translate(locale, "conversation.timeError") };
     const manifestItems = items.map((item, index) => ({
       productId: item.productId,
       productName: item.productName,
@@ -454,7 +511,13 @@ export class NeonConversationService implements ConversationService {
       estimatedDeliveryAt,
       items: manifestItems,
     };
-    const summary = `${point.name}, ${point.neighborhood}, ${humanDistance(point)}. Hora orientativa de llegada: ${state.estimatedDeliveryTime}; puedes entregar en cualquier momento dentro del horario de atención de hoy. ${manifestItems.map((item) => `${item.quantity} ${item.productName} con foto`).join("; ")}. Llegar con todo separado. El manifiesto cuenta como suministro esperado hasta el cierre local, pero el stock solo se incrementará cuando el encargado coteje y valide físicamente la entrega.`;
+    const summary = translate(locale, "conversation.manifestSummary", {
+      point: point.name,
+      area: point.neighborhood,
+      distance: humanDistance(point, locale),
+      eta: state.estimatedDeliveryTime ?? "",
+      items: manifestItems.map((item) => `${number(locale, item.quantity)} ${item.productName} (${locale === "en" ? "photo attached" : "con foto"})`).join("; "),
+    });
     if (!state.draftGroupId) state.draftGroupId = randomUUID();
     await this.contexts.save(input.conversationId, input.channel, state, input.actorId);
     const idempotencyKey = createHash("sha256")
@@ -472,9 +535,10 @@ export class NeonConversationService implements ConversationService {
     return {
       conversationId: input.conversationId,
       phase: "PREVIEW",
-      text: `Recomendación: ${point.name}, ${point.neighborhood}, ${point.reasons.join("; ")}. Revisa el manifiesto antes de confirmar.`,
+      locale,
+      text: translate(locale, "conversation.recommendationReviewManifest", { point: point.name, area: point.neighborhood, reasons: point.reasons.join("; ") }),
       recommendation: point,
-      actionOptions: [{ draftId: draft.draftId, label: "Confirmar manifiesto", summary }],
+      actionOptions: [{ draftId: draft.draftId, label: translate(locale, "conversation.confirmManifest"), summary }],
     };
   }
 }

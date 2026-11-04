@@ -2,6 +2,7 @@ import "server-only";
 import type { PoolClient } from "@neondatabase/serverless";
 import { queryRows, withTransaction } from "@/core/server/db";
 import { readAvailableStock } from "@/repositories/inventory-repository";
+import type { Locale } from "@/domain/types";
 
 interface OfferRow {
   reservation_id: string;
@@ -29,9 +30,19 @@ async function nextSequence(client: PoolClient, pointId: string, productId: stri
 }
 
 async function queueNotification(client: PoolClient, input: {
-  userId: string; eventType: string; text: string; reservationId: string; expiresAt: string;
+  userId: string; eventType: string; reservationId: string; expiresAt: string;
+  quantity: number; productName: string; pointName: string; timeZone: string;
+  productNames?: { en?: string; es?: string };
 }) {
-  const payload = JSON.stringify({ text: input.text, reservationId: input.reservationId, expiresAt: input.expiresAt });
+  const payload = JSON.stringify({
+    reservationId: input.reservationId,
+    expiresAt: input.expiresAt,
+    quantity: input.quantity,
+    productName: input.productName,
+    productNames: input.productNames,
+    pointName: input.pointName,
+    timeZone: input.timeZone,
+  });
   await client.query(
     `INSERT INTO grn_notification_outbox (recipient_user_id, channel, event_type, payload)
      VALUES ($1, 'WEB', $2, $3::jsonb)`,
@@ -137,10 +148,11 @@ export async function reconcileAndAdvanceQueue(client: PoolClient, pointId: stri
   while (available > 0 && created < Math.min(100, capacityRemaining)) {
     const next = await client.query<{
       id: string; request_item_id: string; requester_id: string; quantity: number;
-      fifo_sequence: string; product_name: string; point_name: string; closes_at: string | null;
+      fifo_sequence: string; product_name: string; product_names: { en?: { name?: string }; es?: { name?: string } }; point_name: string; time_zone: string;
     }>(
       `SELECT w.id, w.request_item_id, ar.requester_id, w.quantity, w.fifo_sequence::text,
-              p.name AS product_name, cp.name AS point_name, h.closes_at::text AS closes_at
+              p.name AS product_name, p.localized_content AS product_names,
+              cp.name AS point_name, cp.timezone AS time_zone, h.closes_at::text AS closes_at
          FROM grn_waitlist_entries w
          JOIN grn_aid_request_items i ON i.id = w.request_item_id
          JOIN grn_aid_requests ar ON ar.id = i.request_id
@@ -195,7 +207,14 @@ export async function reconcileAndAdvanceQueue(client: PoolClient, pointId: stri
       eventType: "FIFO_OFFER_CREATED",
       reservationId: commitment.rows[0].id,
       expiresAt: expiry.rows[0]?.expires_at ?? "",
-      text: `Hay ${quantity} unidad(es) de ${candidate.product_name} disponibles en ${candidate.point_name}. El apartado temporal vence en 30 minutos. Si puedes recogerlas hoy, responde con tu horario disponible antes de que venza; la reserva y el código de recojo se activarán tras tu confirmación.`,
+      quantity,
+      productName: candidate.product_name,
+      productNames: {
+        en: candidate.product_names?.en?.name,
+        es: candidate.product_names?.es?.name,
+      },
+      pointName: candidate.point_name,
+      timeZone: candidate.time_zone,
     });
     if (whatsappOutboxId) notificationOutboxIds.push(whatsappOutboxId);
     available -= quantity;
@@ -217,15 +236,17 @@ export async function processQueue(pointId: string, productId: string) {
   return result;
 }
 
-export async function findPendingWaitlistOffer(actorId: string) {
+export async function findPendingWaitlistOffer(actorId: string, locale: Locale = "en") {
   const rows = await queryRows<{
     id: string; conversation_id: string; point_id: string; point_name: string;
     request_item_id: string; product_id: string; product_name: string; quantity: number;
     zone: string; mobility: "NEARBY_ONLY" | "CAN_TRAVEL"; expires_at: string;
+    timezone: string;
   }>(
     `SELECT r.id, wc.conversation_id, r.collection_point_id AS point_id, cp.name AS point_name,
-            i.id AS request_item_id, r.product_id, p.name AS product_name, r.quantity,
-            ar.zone, ar.mobility, r.expires_at
+            i.id AS request_item_id, r.product_id,
+            COALESCE(p.localized_content -> $2::text ->> 'name', p.name) AS product_name,
+            r.quantity, ar.zone, ar.mobility, r.expires_at, cp.timezone
        FROM grn_reservation_commitments r
        JOIN grn_aid_request_items i ON i.id = r.request_item_id
        JOIN grn_aid_requests ar ON ar.id = i.request_id
@@ -235,7 +256,7 @@ export async function findPendingWaitlistOffer(actorId: string) {
       WHERE ar.requester_id = $1 AND r.status = 'PENDING_CONFIRMATION'
         AND r.expires_at > transaction_timestamp()
       ORDER BY r.expires_at, r.id LIMIT 1`,
-    [actorId],
+    [actorId, locale],
   );
   return rows[0] ?? null;
 }

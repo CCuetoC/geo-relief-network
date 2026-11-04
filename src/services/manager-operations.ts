@@ -5,6 +5,7 @@ import { queryRows, withTransaction } from "@/core/server/db";
 import { fitsOnHandCapacity, isWithinOperatingHours } from "@/domain/inventory-policy";
 import { lockInventoryControls, readInventorySnapshots } from "@/repositories/inventory-repository";
 import { reconcileAndAdvanceQueue } from "@/services/queue-service";
+import type { Locale } from "@/domain/types";
 
 export class ManagerOperationError extends Error {
   constructor(message: string, readonly status: number) {
@@ -32,13 +33,14 @@ export async function listManagedPoints(userId: string) {
   );
 }
 
-export async function listActiveReservations(userId: string) {
+export async function listActiveReservations(userId: string, locale: Locale = "en") {
   return queryRows<{
     id: string; point_id: string; point_name: string; product_name: string;
-    quantity: number; expires_at: string; requester_zone: string;
+    quantity: number; expires_at: string; requester_zone: string; timezone: string;
   }>(
-    `SELECT r.id, cp.id AS point_id, cp.name AS point_name, p.name AS product_name,
-            r.quantity, r.expires_at, ar.zone AS requester_zone
+    `SELECT r.id, cp.id AS point_id, cp.name AS point_name,
+            COALESCE(p.localized_content -> $2::text ->> 'name', p.name) AS product_name,
+            r.quantity, r.expires_at, ar.zone AS requester_zone, cp.timezone
        FROM grn_reservation_commitments r
        JOIN grn_aid_request_items i ON i.id = r.request_item_id
        JOIN grn_aid_requests ar ON ar.id = i.request_id
@@ -49,23 +51,24 @@ export async function listActiveReservations(userId: string) {
       WHERE r.status = 'ACTIVE' AND r.expires_at > transaction_timestamp()
       ORDER BY r.expires_at, r.created_at
       LIMIT 100`,
-    [userId],
+    [userId, locale],
   );
 }
 
-export async function listPendingManifests(userId: string) {
+export async function listPendingManifests(userId: string, locale: Locale = "en") {
   return queryRows<{
     id: string; code: string; point_id: string; point_name: string; neighborhood: string;
-    estimated_delivery_at: string; lines: Array<{ id: string; product_id: string; product_name: string; declared_quantity: number; photo_count: number; photo_media_ids: string[] }>;
+    estimated_delivery_at: string; timezone: string; lines: Array<{ id: string; product_id: string; product_name: string; declared_quantity: number; photo_count: number; photo_media_ids: string[] }>;
   }>(
     `SELECT m.id, m.code, m.collection_point_id AS point_id, cp.name AS point_name,
-            cp.neighborhood, m.estimated_delivery_at,
+            cp.neighborhood, m.estimated_delivery_at, cp.timezone,
             json_agg(json_build_object(
-              'id', ml.id, 'product_id', ml.product_id, 'product_name', p.name,
+              'id', ml.id, 'product_id', ml.product_id,
+              'product_name', COALESCE(p.localized_content -> $2::text ->> 'name', p.name),
               'declared_quantity', ml.declared_quantity,
               'photo_count', cardinality(ml.photo_media_ids),
               'photo_media_ids', ml.photo_media_ids
-            ) ORDER BY p.name) AS lines
+            ) ORDER BY COALESCE(p.localized_content -> $2::text ->> 'name', p.name)) AS lines
        FROM grn_donation_manifests m
        JOIN grn_collection_points cp ON cp.id = m.collection_point_id
        JOIN grn_collection_point_managers mgr
@@ -73,10 +76,10 @@ export async function listPendingManifests(userId: string) {
        JOIN grn_donation_manifest_lines ml ON ml.manifest_id = m.id
        JOIN grn_products p ON p.id = ml.product_id
       WHERE m.status = 'PENDING' AND m.expires_at > transaction_timestamp()
-      GROUP BY m.id, cp.name, cp.neighborhood
+      GROUP BY m.id, cp.name, cp.neighborhood, cp.timezone
       ORDER BY m.estimated_delivery_at, m.created_at
       LIMIT 100`,
-    [userId],
+    [userId, locale],
   );
 }
 
@@ -240,12 +243,14 @@ export async function recordPhysicalPickup(userId: string, reservationId: string
     throw new ManagerOperationError("Reserva o código de recojo inválido.", 400);
   }
   return withTransaction(async (client) => {
-    const identity = await client.query<{ point_id: string; product_id: string; requester_id: string; product_name: string }>(
-      `SELECT r.collection_point_id AS point_id, r.product_id, ar.requester_id, p.name AS product_name
+    const identity = await client.query<{ point_id: string; product_id: string; requester_id: string; product_name: string; product_names: { en?: { name?: string }; es?: { name?: string } }; point_name: string }>(
+      `SELECT r.collection_point_id AS point_id, r.product_id, ar.requester_id, p.name AS product_name,
+              p.localized_content AS product_names, cp.name AS point_name
          FROM grn_reservation_commitments r
          JOIN grn_aid_request_items i ON i.id = r.request_item_id
          JOIN grn_aid_requests ar ON ar.id = i.request_id
          JOIN grn_products p ON p.id = r.product_id
+         JOIN grn_collection_points cp ON cp.id = r.collection_point_id
         WHERE r.id = $1`,
       [reservationId],
     );
@@ -305,8 +310,11 @@ export async function recordPhysicalPickup(userId: string, reservationId: string
        VALUES ('RESERVATION', $1, 'PHYSICAL_PICKUP_CONFIRMED', $2, $3::jsonb)`,
       [reservationId, userId, JSON.stringify({ quantity: row.quantity })],
     );
-    const message = `${row.quantity} ${key.product_name} fueron registradas como recogidas en el punto. Gracias por confirmar la entrega física.`;
-    const payload = JSON.stringify({ text: message, reservationId });
+    const payload = JSON.stringify({
+      quantity: Number(row.quantity), productName: key.product_name,
+      productNames: { en: key.product_names?.en?.name, es: key.product_names?.es?.name },
+      pointName: key.point_name, reservationId,
+    });
     await client.query(
       `INSERT INTO grn_notification_outbox (recipient_user_id, channel, event_type, payload)
        VALUES ($1, 'WEB', 'PHYSICAL_PICKUP_CONFIRMED', $2::jsonb)`,

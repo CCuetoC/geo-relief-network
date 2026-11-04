@@ -6,8 +6,9 @@
 
 **Carpeta de trabajo:** `geo-relief-network`
 
-**Estado:** primer flujo vertical y refactor de inventario/conversación implementados en código local; `0003` está aplicada en `vercel-dev`, pero la aceptación de negocio sigue pendiente
-**Ámbito de demostración:** Lima, Perú
+**Estado:** el flujo vertical, el motor de inventario y la localización EN/ES están integrados en la rama de vista previa `codex/grn-mvp-preview-20261104`. La localización pasó pruebas unitarias y la suite completa del motor contra una rama Neon temporal; `0004` está aplicada en `vercel-dev` y en la rama Neon de Preview. El commit bilingüe todavía requiere despliegue y revisión visual en Vercel Preview. `main` y producción no se modificaron.
+**Ámbito del producto:** global; el idioma y la ubicación no limitan el uso a un país
+**Datos de demostración actuales:** Lima, Perú
 **Plataforma:** aplicación web adaptable a celulares y computadoras, con chat web y WhatsApp
 **Repositorio:** https://github.com/CCuetoC/geo-relief-network
 **Producción:** https://geo-relief-network.vercel.app/
@@ -40,6 +41,7 @@ Las operaciones de donación o solicitud requieren autenticación. En la web se 
 6. Distribuir cantidades reabastecidas a solicitudes en espera por orden FIFO, sin dividir una línea de producto de una solicitud.
 7. Usar distancia geodésica directa para encontrar puntos cercanos; la navegación se abre en Google Maps.
 8. Probar texto y voz con Muse Spark, sujeto a que el flujo de audio esté disponible y funcione en el entorno de la hackatón.
+9. Permitir operar la interfaz y el asistente en inglés o español, con preferencia explícita de la persona.
 
 ### Fuera del MVP
 
@@ -48,7 +50,7 @@ Las operaciones de donación o solicitud requieren autenticación. En la web se 
 - Ubicación precisa de solicitantes en mapas públicos.
 - Cálculo de tiempo de viaje mediante Google Routes API.
 - Decisiones de inventario tomadas por un LLM o pronósticos de machine learning.
-- Aplicación móvil nativa y operación productiva multinacional.
+- Aplicación móvil nativa y operación global de producción con cobertura multinacional; el producto sí está diseñado para poder adaptarse a distintas regiones.
 
 ## 3. Acceso, canales y privacidad
 
@@ -60,6 +62,16 @@ Las operaciones de donación o solicitud requieren autenticación. En la web se 
 - Para vincular WhatsApp, la persona inicia sesión en la web, registra su número, acepta recibir avisos y pulsa un enlace a WhatsApp que contiene un código de un solo uso. La persona envía ese código al número de la aplicación; el servidor verifica el código y el remitente antes de asociar ambos canales.
 - El chat web y el webhook de WhatsApp son adaptadores de canal que llaman al mismo servicio de conversación y casos de uso del backend.
 - El chat web permite a los jueces probar el producto sin depender del número de WhatsApp de prueba, que limita los destinatarios permitidos.
+
+### Idioma y localización
+
+- La primera versión de producto admite inglés (`en`) y español (`es`). El idioma del navegador (`Accept-Language`) es solo una sugerencia inicial; si no es inglés ni español, se usa inglés.
+- Un selector visible permite elegir idioma en cualquier vista. La elección manual se conserva en la cookie `grn_locale` y prevalece sobre el idioma del navegador.
+- No se infiere el idioma a partir del país, la IP ni la ubicación. El idioma de la interfaz se envía al servicio de conversación; Muse Spark debe responder en ese idioma y transcribir la voz en el idioma que se escucha.
+- WhatsApp conserva el idioma preferido durante el vínculo. Los mensajes entrantes pueden actualizar esa preferencia; la inferencia automática por texto es una ayuda y el siguiente mensaje del usuario la puede corregir.
+- Los productos conservan ID/slug estables. Nombre, unidad y alias se presentan por idioma; “water” y “agua” deben resolver a la misma identidad de catálogo validada por el backend.
+- Fechas, cantidades y horas se presentan con `Intl` según el idioma elegido. Las horas del punto respetan su zona horaria IANA.
+- La localización no cambia reglas de disponibilidad, prioridad FIFO, permisos, topes ni escrituras.
 
 ### Datos personales
 
@@ -78,6 +90,7 @@ Las operaciones de donación o solicitud requieren autenticación. En la web se 
 - Necesidad explícita de un producto y cantidad total solicitada.
 - Ubicación temporal o zona seleccionada para recomendaciones.
 - Confirmaciones, correcciones, cancelaciones y códigos de un solo uso.
+- Preferencia de idioma de interfaz/canal (`en` o `es`).
 - Validación del encargado: cantidades aceptadas, discrepancias y rechazos.
 - Configuración de puntos: ubicación pública, horarios, capacidad, catálogo, topes y reglas de recepción.
 
@@ -90,6 +103,7 @@ Las operaciones de donación o solicitud requieren autenticación. En la web se 
 - Apartado FIFO de 30 minutos, código de recojo y estado de reserva.
 - Notificaciones en WhatsApp cuando la ventana de atención lo permita y avisos visibles en la web.
 - Mapa público con puntos y necesidades agregadas por zona.
+- Textos, unidades, fechas, cantidades y avisos operativos en el idioma elegido.
 
 ## 5. Flujos principales
 
@@ -131,6 +145,8 @@ El encargado valida; no vuelve a transcribir la donación desde cero. Las fotos 
 ### 5.4 Asistente de texto y voz
 
 - Muse Spark extrae slots de texto o de la transcripción; el servicio común para web y WhatsApp agrupa preguntas por campos faltantes, consulta servicios deterministas y prepara una vista previa. El modelo no decide permisos, catálogo, disponibilidad ni stock.
+- El idioma elegido se mantiene durante preguntas de seguimiento, vista previa, errores, confirmación y avisos. En web tiene prioridad la selección manual guardada; en WhatsApp se usa la preferencia del vínculo, actualizada por mensajes entrantes.
+- Las opciones de catálogo enviadas al modelo incluyen solo productos activos y su identidad estable, con etiqueta/alias localizado. El backend vuelve a comprobar que el producto propuesto existe.
 - El flujo de voz usa dos llamadas secuenciales: Muse Spark 1.2 para transcribir audio en memoria y Muse Spark 1.3 para extraer campos estructurados. No se conserva audio crudo.
 - La primera implementación admite WAV/MP3. Si el modelo falla o el formato no se admite, el usuario puede continuar por texto. Las notas de voz OGG comunes de WhatsApp aún no se convierten y reciben esta indicación.
 - El modelo solo recibe `photo_attached: boolean`; nunca recibe fotos ni `storage_key`.
@@ -154,6 +170,8 @@ Entidades iniciales para el diseño del esquema:
 - **Vínculo de canal:** cuenta web, identificador de WhatsApp verificado seudónimo, destino cifrado, consentimiento y estado del vínculo.
 - **Punto de acopio:** ubicación pública, zona horaria, horario, capacidad, catálogo y estado operativo.
 - **Producto y reglas de límite:** categoría, unidad, aceptación y tope configurable por producto/punto; valores y periodo aún pendientes.
+- **Presentación localizada del producto:** etiqueta y unidad por idioma, alias de búsqueda y un ID/slug canónico que no cambia al traducir.
+- **Preferencia de idioma:** selección web y cookie `grn_locale`; idioma preferido del vínculo WhatsApp. No se usa geolocalización para decidir idioma.
 - **Contexto conversacional:** slots estructurados mínimos con expiración lógica de 24 horas; sin texto completo, audio crudo, coordenadas precisas ni perfil familiar.
 - **Borrador de acción:** payload y resumen exactos, ID opaco presentado al usuario, hash del ID persistido, vencimiento a 30 minutos y clave idempotente. Un borrador no aparta stock.
 - **Manifiesto y líneas:** donante, punto, código, cantidades declaradas, hora estimada orientativa, `expires_at` de cierre local, referencias privadas a fotos, cantidades validadas y estado `EXPIRED`.
@@ -208,8 +226,12 @@ Entidades iniciales para el diseño del esquema:
 - Fallar el envío de WhatsApp después del commit no convierte una operación persistida en `503`; la intención en outbox conserva el resultado y puede reintentarse en una operación posterior. Un despacho se limita a los avisos creados por la operación o al usuario que inició el mensaje, no a una lectura global.
 - Fotos privadas no se envían a Muse Spark; voz se incluye solo si supera la validación de formato y transcripción.
 - Un mensaje de WhatsApp fuera de la ventana de 24 horas usa el fallback web si no hay plantilla aprobada.
-- Estado de verificación al 2026-11-03: `npm run typecheck` y `npm run build` (Turbopack predeterminado) pasaron después de integrar la portada mapa/lista. La suite `node:test` completó 11/11 pruebas (6 integración y 5 unitarias) contra una rama Neon descartable con el esquema `0003`; el detalle y los límites están en `PROGRESS.md`. El mapa/lista ya está conectado al endpoint público; Google Maps JavaScript API aún no se ha verificado con una clave configurada y no se ha hecho una revisión visual móvil/desktop.
-- Las migraciones `0001`, `0002` y `0003-daily-manifest-expiry.sql` están aplicadas en `vercel-dev`. `0003` se ejecutó con el runner versionado tras verificar que `DATABASE_URL_UNPOOLED` corresponde al endpoint de la rama. Neon confirmó el checksum, `expires_at NOT NULL`, el constraint con `EXPIRED` y el índice de vencimiento. `production` no se modificó. Los flujos de negocio aún requieren pruebas de aceptación.
+- Una elección manual EN/ES prevalece tras recargar y al cambiar el idioma del navegador; un navegador en otro idioma inicia en inglés.
+- Los diccionarios EN/ES tienen el mismo conjunto de claves, y las entradas `water` y `agua` resuelven al mismo slug de catálogo.
+- Chat, mensajes de voz transcritos, errores, fechas/cantidades y notificaciones usan el idioma del canal o preferencia guardada, respetando la zona horaria del punto.
+- La localización no modifica cantidades, stock, permisos, reglas de capacidad, reserva indivisible ni orden FIFO.
+- Estado de verificación al 2026-11-04: `npm run typecheck` y `npm run build` (Turbopack predeterminado) pasaron. `npm run test:unit` pasó 10/10 y `npm test` pasó 16/16 (10 unitarias y 6 de integración) contra una rama Neon temporal con `0004`. La suite verifica reglas de inventario e invariantes EN/ES; no sustituye una revisión de UI ni una prueba real de Muse/WhatsApp. El detalle y límites constan en `PROGRESS.md`.
+- Las migraciones `0001`–`0004` están aplicadas y verificadas en `vercel-dev` y en la rama Neon vinculada al Preview `preview/codex/grn-mvp-preview-20261104`. `0004` agrega etiquetas, unidades y alias localizados al catálogo y preferencia de idioma para vínculos de WhatsApp; no cambia las reglas de inventario. La rama `production` no se modificó.
 - En `vercel-dev` se verificaron Neon Auth con Google y respuestas 200/403/401 de acceso al panel para las cuentas de prueba. En una ronda manual separada se probaron conversaciones reales con Muse y la ruta autenticada de carga privada; esa ronda no incluyó confirmación de borrador, voz, validación física ni reservas/FIFO. Posteriormente, la suite automatizada ejercitó servicios de manifiestos, solicitudes, inventario y cola en una rama Neon temporal. No ejercitó OAuth, interfaz, Muse, voz, WhatsApp real ni S3 real. La ronda automatizada no dejó solicitudes, manifiestos ni movimientos en `vercel-dev`; allí permanece únicamente el medio sintético documentado. El detalle está en `PROGRESS.md`.
 
 ## 9. GitHub y despliegue
@@ -217,7 +239,7 @@ Entidades iniciales para el diseño del esquema:
 - GitHub es el repositorio de código fuente del proyecto: CCuetoC/geo-relief-network.
 - La rama main es la rama de producción. Un push a esa rama activa la integración de GitHub con Vercel.
 - GitHub almacena el código y notifica el cambio; Vercel ejecuta el build y publica el deployment. No se despliega manualmente desde GitHub.
-- El deployment de producción está disponible en https://geo-relief-network.vercel.app/ y corresponde al último cambio enviado a `main`. Este flujo vertical todavía está en el worktree local y no se ha desplegado.
+- El deployment de producción está disponible en https://geo-relief-network.vercel.app/ y corresponde al último cambio enviado a `main`. El bilingüe se prepara en la rama de vista previa `codex/grn-mvp-preview-20261104`; su deployment y revisión se completarán allí antes de integrar a `main`.
 - Neon Postgres es el proyecto de base de datos asociado. Su región actual es AWS us-east-2 (Ohio), con ramas production y vercel-dev.
 - Las migraciones versionadas `0001-conversation-workflow.sql` y `0002-indivisible-request-lines.sql` se aplicaron y verificaron el 2026-10-29 (America/Lima) en `vercel-dev` (`neondb`). `grn_schema_migrations` registra `0001` con checksum SHA-256 `cf4464cc5905cf76cdc1ecde8790887102592796cf7ee90cca81a299c3855509` y `0002` con checksum SHA-256 `cf8285a253e462c7ee477d8f119e2603c77b9a63e80c033c9d3b10429e530b56`. `0002` agrega triggers que rechazan compromisos o entradas FIFO menores que la cantidad completa de su línea de solicitud. La rama `production` no se modificó.
 - Las credenciales se mantienen en variables de entorno locales o de Vercel; nunca se guardan en GitHub.

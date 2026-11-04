@@ -26,7 +26,8 @@ import {
 
 async function requireMigration0003() {
   const rows = await withTransaction((client) => client.query<{ version: string; checksum: string }>(
-    "SELECT version, checksum FROM grn_schema_migrations ORDER BY version DESC LIMIT 1",
+    "SELECT version, checksum FROM grn_schema_migrations WHERE version = $1",
+    ["0003"],
   ));
   assert.equal(rows.rows[0]?.version, "0003", "La rama de prueba debe tener la migración 0003 aplicada.");
   const migration = await readFile(resolve(process.cwd(), "migrations/0003-daily-manifest-expiry.sql"));

@@ -18,5 +18,6 @@ Las fechas siguientes son fechas de registro. La fecha original de cada decisió
 | [ADR-0010](0010-asignacion-indivisible-por-linea.md) | No dividir líneas de solicitud entre reserva y cola FIFO | Aceptado | 2026-10-29 |
 | [ADR-0011](0011-manifiestos-y-cierre-local.md) | Mantener el ETA como orientación y vencer el anuncio al cierre local | Aceptado | 2026-11-02 |
 | [ADR-0012](0012-limites-de-servicio-y-repositorio.md) | Separar políticas, casos de uso, SQL y adaptadores por flujo | Aceptado | 2026-11-02 |
+| [ADR-0013](0013-localizacion-bilingue.md) | Localizar interfaz y canales en EN/ES con elección manual y catálogo de identidad estable | Aceptado | 2026-11-04 |
 
 Una decisión aceptada puede revisarse cuando se active su disparador. Si se reemplaza, conserva este registro y crea otro ADR que lo enlace; no reutilices ni renumeres IDs.

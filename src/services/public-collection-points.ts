@@ -1,7 +1,7 @@
 import "server-only";
-import type { PublicCollectionPoint } from "@/domain/types";
+import type { Locale, PublicCollectionPoint } from "@/domain/types";
 import { readPublicCollectionPoints } from "@/repositories/public-collection-points-repository";
 
-export function listPublicCollectionPoints(): Promise<PublicCollectionPoint[]> {
-  return readPublicCollectionPoints();
+export function listPublicCollectionPoints(locale: Locale): Promise<PublicCollectionPoint[]> {
+  return readPublicCollectionPoints(locale);
 }

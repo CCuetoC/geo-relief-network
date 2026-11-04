@@ -1,6 +1,7 @@
 import "server-only";
 import { sendWhatsAppText } from "@/adapters/server/whatsapp";
 import { decryptWhatsAppDestination } from "@/core/server/whatsapp-security";
+import { notificationMessage } from "@/i18n/messages";
 import {
   claimWhatsAppOutbox,
   getWhatsAppDestinationCiphertext,
@@ -31,9 +32,7 @@ export async function dispatchWhatsAppOutbox(filter: WhatsAppOutboxFilter) {
           nonce: encrypted.destination_nonce,
           tag: encrypted.destination_tag,
         });
-        const message = typeof item.payload?.text === "string"
-          ? item.payload.text
-          : "Tienes una actualización de Geo Relief Network. Abre el chat web para revisarla.";
+        const message = notificationMessage(item.preferred_locale, item.event_type, item.payload ?? {});
         const sent = await sendWhatsAppText(recipient, message);
         providerMessageId = sent.providerMessageId;
         succeeded = true;

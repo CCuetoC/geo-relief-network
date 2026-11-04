@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { getAuthenticatedActor } from "@/core/server/auth";
 import { webChatAdapter } from "@/adapters/server/web-chat";
 import type { ConversationInput, GeoCoordinates } from "@/domain/types";
+import { DEFAULT_LOCALE, parseLocale } from "@/i18n/locale";
+import { translate } from "@/i18n/messages";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -41,6 +43,7 @@ async function boundedRequest(request: Request) {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  let locale = parseLocale(new URL(request.url).searchParams.get("locale")) ?? DEFAULT_LOCALE;
   try {
     const actor = await getAuthenticatedActor();
     const bounded = await boundedRequest(request);
@@ -49,6 +52,7 @@ export async function POST(request: Request): Promise<Response> {
 
     if (contentType.includes("multipart/form-data")) {
       const form = await bounded.formData();
+      locale = parseLocale(form.get("locale")) ?? locale;
       const audio = form.get("audio");
       const geo = form.get("location");
       const photosRaw = form.get("photoMediaIds");
@@ -72,10 +76,11 @@ export async function POST(request: Request): Promise<Response> {
       let format: "wav" | "mp3";
       if (audio.type === "audio/wav" || audio.type === "audio/x-wav") format = "wav";
       else if (audio.type === "audio/mpeg" || audio.type === "audio/mp3") format = "mp3";
-      else return Response.json({ error: "unsupported_audio_format", message: "Envía una nota WAV o MP3, o escribe el mensaje." }, { status: 415 });
+      else return Response.json({ error: "unsupported_audio_format", message: translate(locale, "api.audioFormat") }, { status: 415 });
       body = {
         conversationId: String(form.get("conversationId") ?? randomUUID()),
         channel: "WEB",
+        locale,
         actorId: actor?.id,
         text: String(form.get("text") ?? ""),
         audio: { base64: Buffer.from(await audio.arrayBuffer()).toString("base64"), format },
@@ -87,9 +92,11 @@ export async function POST(request: Request): Promise<Response> {
       const parsed: unknown = await bounded.json();
       if (!parsed || typeof parsed !== "object") return Response.json({ error: "invalid_body" }, { status: 400 });
       const value = parsed as Record<string, unknown>;
+      locale = parseLocale(value.locale) ?? locale;
       body = {
         conversationId: typeof value.conversationId === "string" ? value.conversationId : randomUUID(),
         channel: "WEB",
+        locale,
         actorId: actor?.id,
         text: typeof value.text === "string" ? value.text.slice(0, 6000) : undefined,
         location: isCoordinates(value.location) ? value.location : undefined,
@@ -102,6 +109,6 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json(output, { status: output.phase === "ERROR" ? 400 : 200 });
   } catch (error) {
     if (error instanceof Error && error.message === "body_too_large") return Response.json({ error: "body_too_large" }, { status: 413 });
-    return Response.json({ error: "conversation_unavailable", message: "No pude procesar el mensaje ahora; no se confirmó ninguna operación." }, { status: 503 });
+    return Response.json({ error: "conversation_unavailable", message: translate(locale, "api.chatError") }, { status: 503 });
   }
 }

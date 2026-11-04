@@ -1,5 +1,6 @@
 import "server-only";
 import { queryRows } from "@/core/server/db";
+import type { Locale } from "@/domain/types";
 
 export interface PointProductRow {
   point_id: string;
@@ -31,7 +32,7 @@ export interface PointProductRow {
 }
 
 /** SQL projection for recommendations; stock and inbound quantities use the shared database policies. */
-export async function readPointProductRows(productIds: string[], quantities: number[]) {
+export async function readPointProductRows(productIds: string[], quantities: number[], locale: Locale) {
   return queryRows<PointProductRow>(
     `WITH clock AS (
        SELECT transaction_timestamp() AS now
@@ -42,7 +43,8 @@ export async function readPointProductRows(productIds: string[], quantities: num
             h.opens_at::text AS opens_at, h.closes_at::text AS closes_at,
             date_trunc('minute', clock.now AT TIME ZONE cp.timezone)::time::text AS local_time,
             EXTRACT(DOW FROM clock.now AT TIME ZONE cp.timezone)::int AS local_weekday,
-            p.id AS product_id, p.name AS product_name,
+            p.id AS product_id,
+            COALESCE(p.localized_content -> $3::text ->> 'name', p.name) AS product_name,
             requested.quantity AS requested_quantity,
             cpp.max_per_request, cpp.max_on_hand,
             COALESCE(ic.confirmed_on_hand, 0)::int AS on_hand,
@@ -101,6 +103,6 @@ export async function readPointProductRows(productIds: string[], quantities: num
        ) intakes ON true
       WHERE cp.active = true
       ORDER BY cp.id, p.id`,
-    [productIds, quantities],
+    [productIds, quantities, locale],
   );
 }

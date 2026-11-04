@@ -4,6 +4,7 @@ import { haversineKm } from "@/domain/geospatial";
 import { fitsOnHandCapacity } from "@/domain/inventory-policy";
 import { readPointProductRows, type PointProductRow } from "@/repositories/geospatial-matching-repository";
 import type { CollectionPointReadService } from "@/services/contracts";
+import { translate } from "@/i18n/messages";
 
 export { haversineKm } from "@/domain/geospatial";
 
@@ -15,7 +16,7 @@ function minutes(value: string | null): number | null {
 }
 
 function normalizeZone(value: string) {
-  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es").trim();
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 }
 
 export class NeonCollectionPointReadService implements CollectionPointReadService {
@@ -29,7 +30,7 @@ export class NeonCollectionPointReadService implements CollectionPointReadServic
     }
     const productIds = [...requested.keys()];
     const quantities = productIds.map((productId) => requested.get(productId)!.quantity);
-    const rows = await readPointProductRows(productIds, quantities);
+    const rows = await readPointProductRows(productIds, quantities, input.locale);
 
     const byPoint = new Map<string, {
       row: PointProductRow;
@@ -104,22 +105,22 @@ export class NeonCollectionPointReadService implements CollectionPointReadServic
       }
 
       const reasons: string[] = [];
-      if (entry.distanceKm !== null) reasons.push(`${entry.distanceKm.toFixed(1)} km en distancia directa`);
+      if (entry.distanceKm !== null) reasons.push(translate(input.locale, "reason.distance", { distance: new Intl.NumberFormat(input.locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(entry.distanceKm) }));
       if (input.mode === "DONOR") {
         const needed = entry.products.filter((item) => Math.max(0, item.unmetDemand - item.availableQuantity - item.expectedInbound) > 0);
-        if (needed.length) reasons.push(`déficit actual de ${needed.map((item) => item.productName).join(", ")}`);
-        if (entry.products.some((item) => item.expectedInbound > 0)) reasons.push("hay donaciones anunciadas, todavía no disponibles");
+        if (needed.length) reasons.push(translate(input.locale, "reason.donorDeficit", { products: needed.map((item) => item.productName).join(", ") }));
+        if (entry.products.some((item) => item.expectedInbound > 0)) reasons.push(translate(input.locale, "reason.expectedInbound"));
       } else if (entry.products.some((item) => item.queuedRequestCount > 0)) {
-        reasons.push("hay solicitudes anteriores en la cola FIFO; las unidades se asignan por turno");
+        reasons.push(translate(input.locale, "reason.fifo"));
       } else if (entry.products.some((item) => item.availableQuantity > 0)) {
-        reasons.push("tiene stock físico confirmado disponible");
+        reasons.push(translate(input.locale, "reason.stock"));
       } else {
-        reasons.push("acepta estos productos, pero ahora no tiene unidades disponibles; la solicitud quedaría en espera");
+        reasons.push(translate(input.locale, "reason.noStock"));
       }
       if (input.mode === "AID_SEEKER" && Number(row.pickup_capacity) <= Number(row.pickup_count_today)) {
-        reasons.push("la capacidad de recojo de hoy está completa; la solicitud podrá quedar en espera");
+        reasons.push(translate(input.locale, "reason.pickupCapacity"));
       }
-      reasons.push(`atiende en ${row.neighborhood} hasta ${row.closes_at?.slice(0, 5)}`);
+      reasons.push(translate(input.locale, "reason.servesUntil", { area: row.neighborhood, time: row.closes_at?.slice(0, 5) ?? "" }));
 
       ranked.push({
         id,

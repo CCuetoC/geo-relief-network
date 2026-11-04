@@ -6,6 +6,7 @@ import type {
   ConversationState,
   DonationManifest,
   GeoCoordinates,
+  Locale,
 } from "@/domain/types";
 
 export interface ConversationService {
@@ -36,6 +37,7 @@ export interface DonationManifestService {
 
 export interface CollectionPointReadService {
   recommend(input: {
+    locale: Locale;
     zone: string;
     origin?: GeoCoordinates;
     items: Array<{ productId: string; productName: string; quantity: number }>;
@@ -59,5 +61,7 @@ export interface StructuredTurnExtractor {
     audio?: { base64: string; format: "wav" | "mp3" };
     state: ConversationState;
     photoAttached: boolean;
+    locale: Locale;
+    catalog: Array<{ slug: string; name: string; aliases: string[] }>;
   }): Promise<ConversationState & { cancel?: boolean }>;
 }

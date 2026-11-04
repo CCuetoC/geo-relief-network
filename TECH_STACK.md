@@ -6,8 +6,9 @@
 
 **Carpeta de trabajo:** `geo-relief-network`
 
-**Estado:** primer flujo vertical y refactor de separación de responsabilidades implementados en el worktree local; `npm run typecheck` y `npm run build` pasaron el 2026-11-03 tras integrar la portada mapa/lista. La suite automatizada `node:test` pasó 11/11 el 2026-11-02. Siguen pendientes verificaciones de extremo a extremo con proveedores y cuentas reales y la carga real de Google Maps con una clave configurada.
-**Ámbito de demostración:** Lima, Perú
+**Estado:** el flujo vertical, el refactor de separación de responsabilidades y la localización EN/ES están integrados en la rama de vista previa `codex/grn-mvp-preview-20261104`. `npm run typecheck`, `npm run build`, `npm run test:unit` (10/10) y `npm test` (16/16, incluyendo integración contra una rama Neon temporal con `0004`) pasaron el 2026-11-04. El commit bilingüe aún requiere despliegue y revisión visual en Preview; `main` y producción no se modificaron.
+**Ámbito del producto:** global, con idioma y geografía configurables
+**Datos de demostración:** Lima, Perú
 **Objetivo:** MVP web responsive con coordinación transaccional de inventario, solicitudes y cola de ayuda
 
 ## 1. Arquitectura y principios
@@ -34,6 +35,7 @@
 | Mapa y lugares | Google Maps Platform y Google Places | Mostrar puntos, buscar lugares y abrir navegación. |
 | Asistente | Meta Model API — Muse Spark | Intención, extracción, consultas y explicación; no autoridad para mutar inventario ni confirmar eventos físicos. |
 | Canales | Chat web y WhatsApp Cloud API | Chat público de consulta y operaciones autenticadas; WhatsApp vinculado a una cuenta web verificada. |
+| Localización | Diccionarios TypeScript, `Intl`, cookie `grn_locale` | Inglés/español; selector manual visible, sugerencia inicial desde `Accept-Language`, fallback inglés y preferencia persistida. No se deriva el idioma del país ni de la geolocalización. |
 | Herramienta de desarrollo | Muse Code, opcional | Herramienta de build-time; no parte del runtime. |
 
 ## 3. Persistencia SQL-first y migraciones
@@ -101,6 +103,15 @@
 - Web y WhatsApp llaman al mismo servicio de conversación/casos de uso a través de adaptadores separados. Acciones de escritura requieren confirmación explícita de la persona y validación backend.
 - La ventana de atención de WhatsApp es móvil y se abre/renueva con mensajes de la persona. Fuera de 24 horas se requieren plantillas aprobadas; para el MVP se usa el aviso web como fallback. El número de prueba tiene destinatarios limitados, por lo que el chat web es el acceso público de evaluación. [Política de WhatsApp Business](https://whatsappbusiness.com/policy/?faq=5)
 
+### Idioma y presentación localizada
+
+- Los contratos de conversación transportan `locale: "en" | "es"`. En la web, la cookie manual prevalece; sin cookie, `Accept-Language` decide si iniciar en inglés o español y los demás idiomas caen a inglés.
+- El cliente conserva la elección en `grn_locale` y la comparte con chat, solicitudes de vínculo y vistas que presentan fechas, horas y cantidades. La zona horaria de los puntos permanece como IANA independiente del idioma.
+- La conversación y Muse Spark reciben el locale elegido. El modelo puede extraer el idioma del mensaje de WhatsApp; el adaptador recuerda la preferencia y la usa para próximos avisos. La preferencia guardada al vincular toma inicialmente el idioma web.
+- El catálogo conserva identidad canónica estable. `localized_content` lleva nombre, unidad y alias por idioma; el servicio entrega al modelo las opciones activas y valida el slug propuesto contra el catálogo.
+- Las notificaciones del outbox conservan datos semánticos del evento y se localizan al despachar según el locale del canal receptor; no se persiste una única frase española como cuerpo compartido.
+- La migración `0004-bilingual-localization.sql` añade campos localizados al catálogo y preferencia de idioma de WhatsApp. Se probó en una rama Neon temporal y se aplicó con el runner versionado a `vercel-dev` y a la rama Neon de Preview. No altera ninguna política de inventario.
+
 ### Fotos
 
 - Web y WhatsApp pueden adjuntar fotos al manifiesto.
@@ -139,8 +150,8 @@
 - URL estable de producción: https://geo-relief-network.vercel.app/.
 - El deployment actual se generó desde GitHub y Vercel reportó la región iad1 (Ashburn, Virginia). La región puede verificarse nuevamente en cada deployment.
 - El proyecto Neon asociado es geo-relief-network, en AWS us-east-2 (Ohio). Neon muestra las ramas production y vercel-dev; esta última es una rama de desarrollo asociada a la integración con Vercel.
-- El primer flujo vertical está implementado en el worktree local. No se ha enviado a `main` ni se ha desplegado; la producción sigue en el commit anterior.
-- `0001`, `0002` y `0003` están aplicadas en `vercel-dev`. `0003` agrega vencimiento local de manifiestos y funciones compartidas de stock; se aplicó el 2026-11-02 mediante `npm run db:migrate` después de verificar que `DATABASE_URL_UNPOOLED` apunta al endpoint de esa rama. Se confirmó el registro de versión/checksum, `expires_at`, el estado `EXPIRED` y el índice. El detalle está en PROGRESS.md. `production` no se modificó.
+- El flujo vertical y el bilingüe están en la rama de vista previa `codex/grn-mvp-preview-20261104`. La revisión final se hará en Preview; solo después se integrará a `main`, que activa la publicación de producción.
+- `0001`–`0004` están aplicadas en `vercel-dev` y en la rama Neon de Preview `preview/codex/grn-mvp-preview-20261104`. `0003` incorpora vencimiento local de manifiestos; `0004` localiza el catálogo y guarda preferencia de idioma de WhatsApp. Ambas se aplicaron con `npm run db:migrate` y se verificó su checksum. La rama `production` no se modificó; el detalle está en `PROGRESS.md`.
 - `.env.local`, ignorado por Git, contiene las URLs de Postgres y Auth de `vercel-dev` y el secreto local de cookies. `npm run db:migrate` carga ese archivo y usa conexión directa. La compilación no valida conectividad con proveedores ni sustituye la aceptación de negocio.
 - Nunca poner secretos de Neon, Meta, WhatsApp o Google en el repositorio. Configurarlos en el entorno local y en las variables de entorno de Vercel.
 

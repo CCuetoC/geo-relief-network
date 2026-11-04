@@ -1,5 +1,6 @@
 import "server-only";
 import type { PublicCollectionPoint, PublicPointProduct } from "@/domain/types";
+import type { Locale } from "@/domain/types";
 import { queryRows } from "@/core/server/db";
 
 interface PublicPointRow {
@@ -22,7 +23,7 @@ interface PublicPointRow {
 }
 
 /** Public projection intentionally contains collection point locations only, never requester coordinates. */
-export async function readPublicCollectionPoints(): Promise<PublicCollectionPoint[]> {
+export async function readPublicCollectionPoints(locale: Locale): Promise<PublicCollectionPoint[]> {
   const rows = await queryRows<PublicPointRow>(
     `WITH clock AS (SELECT transaction_timestamp() AS now)
      SELECT cp.id AS point_id, cp.name AS point_name, cp.neighborhood, cp.city,
@@ -33,7 +34,9 @@ export async function readPublicCollectionPoints(): Promise<PublicCollectionPoin
                  ELSE date_trunc('minute', clock.now AT TIME ZONE cp.timezone)::time >= h.opens_at
                   AND date_trunc('minute', clock.now AT TIME ZONE cp.timezone)::time < h.closes_at
             END AS is_open,
-            p.id AS product_id, p.name AS product_name, p.unit AS product_unit,
+            p.id AS product_id,
+            COALESCE(p.localized_content -> $1::text ->> 'name', p.name) AS product_name,
+            COALESCE(p.localized_content -> $1::text ->> 'unit', p.unit) AS product_unit,
             CASE WHEN p.id IS NULL THEN 0
                  ELSE grn_available_stock(cp.id, p.id, clock.now)
             END::int AS available_quantity,
@@ -58,7 +61,8 @@ export async function readPublicCollectionPoints(): Promise<PublicCollectionPoin
             AND i.waiting_quantity > 0
        ) demand ON true
       WHERE cp.active = true
-      ORDER BY cp.name, p.name NULLS LAST`,
+      ORDER BY cp.name, product_name NULLS LAST`,
+    [locale],
   );
 
   const points = new Map<string, PublicCollectionPoint>();

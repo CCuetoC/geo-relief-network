@@ -1,5 +1,6 @@
 import "server-only";
 import { queryRows, withTransaction } from "@/core/server/db";
+import type { Locale } from "@/domain/types";
 
 export interface WhatsAppOutboxFilter {
   outboxIds?: string[];
@@ -10,7 +11,9 @@ export interface WhatsAppOutboxFilter {
 export interface ClaimedWhatsAppOutboxRow {
   id: string;
   recipient_user_id: string;
-  payload: { text?: string };
+  event_type: string;
+  payload: Record<string, unknown>;
+  preferred_locale: Locale;
   attempt_count: number;
 }
 
@@ -22,15 +25,17 @@ export async function claimWhatsAppOutbox(filter: WhatsAppOutboxFilter) {
 
   return withTransaction(async (client) => {
     const rows = await client.query<ClaimedWhatsAppOutboxRow>(
-      `SELECT id, recipient_user_id, payload, attempt_count
-         FROM grn_notification_outbox
-        WHERE channel = 'WHATSAPP' AND attempt_count < 3
-          AND (status IN ('PENDING', 'FAILED') OR (status = 'SENDING' AND lease_until <= transaction_timestamp()))
-          AND (($1::uuid[] IS NOT NULL AND id = ANY($1::uuid[]))
-            OR ($2::text[] IS NOT NULL AND recipient_user_id = ANY($2::text[])))
-          AND ($3::uuid[] IS NULL OR id <> ALL($3::uuid[]))
-        ORDER BY created_at, id
-        LIMIT 20 FOR UPDATE SKIP LOCKED`,
+      `SELECT o.id, o.recipient_user_id, o.event_type, o.payload, o.attempt_count,
+              COALESCE(l.preferred_locale, 'en') AS preferred_locale
+         FROM grn_notification_outbox o
+         LEFT JOIN grn_whatsapp_links l ON l.user_id = o.recipient_user_id
+        WHERE o.channel = 'WHATSAPP' AND o.attempt_count < 3
+          AND (o.status IN ('PENDING', 'FAILED') OR (o.status = 'SENDING' AND o.lease_until <= transaction_timestamp()))
+          AND (($1::uuid[] IS NOT NULL AND o.id = ANY($1::uuid[]))
+            OR ($2::text[] IS NOT NULL AND o.recipient_user_id = ANY($2::text[])))
+          AND ($3::uuid[] IS NULL OR o.id <> ALL($3::uuid[]))
+        ORDER BY o.created_at, o.id
+        LIMIT 20 FOR UPDATE OF o SKIP LOCKED`,
       [ids.length ? ids : null, users.length ? users : null, excluded.length ? excluded : null],
     );
     for (const row of rows.rows) {
@@ -64,6 +69,21 @@ export async function getWhatsAppDestinationCiphertext(userId: string) {
     [userId],
   );
   return rows[0] ?? null;
+}
+
+export async function getWhatsAppPreferredLocale(userId: string): Promise<Locale> {
+  const rows = await queryRows<{ preferred_locale: Locale }>(
+    `SELECT preferred_locale FROM grn_whatsapp_links WHERE user_id = $1`,
+    [userId],
+  );
+  return rows[0]?.preferred_locale ?? "en";
+}
+
+export async function updateWhatsAppPreferredLocale(userId: string, locale: Locale) {
+  await withTransaction((client) => client.query(
+    `UPDATE grn_whatsapp_links SET preferred_locale = $2 WHERE user_id = $1`,
+    [userId, locale],
+  ).then(() => undefined));
 }
 
 export async function recordWhatsAppOutboxAttempt(input: {

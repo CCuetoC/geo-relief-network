@@ -6,6 +6,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GeoCoordinates, PublicCollectionPoint } from "@/domain/types";
 import { haversineKm } from "@/domain/geospatial";
 import { googleMapsBrowserConfig } from "@/adapters/client/maps";
+import { useI18n } from "@/adapters/client/i18n-provider";
+import { formatNumber } from "@/i18n/locale";
 
 interface GoogleMapInstance {
   panTo(position: { lat: number; lng: number }): void;
@@ -53,8 +55,8 @@ function formatHour(value: string | null) {
   return value?.slice(0, 5) ?? null;
 }
 
-function normalize(value: string) {
-  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es").trim();
+function normalize(value: string, locale: "en" | "es") {
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase(locale).trim();
 }
 
 function directionsUrl(point: PublicCollectionPoint) {
@@ -62,17 +64,20 @@ function directionsUrl(point: PublicCollectionPoint) {
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`;
 }
 
-function availabilityLabel(quantity: number, unit: string) {
+function availabilityLabel(quantity: number, unit: string, locale: "en" | "es") {
   let displayedUnit = unit;
   if (quantity !== 1 && !unit.endsWith("s")) {
-    if (unit.endsWith("a")) displayedUnit = `${unit.slice(0, -1)}as`;
+    if (locale === "en") displayedUnit = `${unit}s`;
+    else if (unit.endsWith("a")) displayedUnit = `${unit.slice(0, -1)}as`;
     else if (unit.endsWith("o")) displayedUnit = `${unit.slice(0, -1)}os`;
-    else displayedUnit = `${unit}${unit.endsWith("e") ? "s" : "es"}`;
+    else displayedUnit = `${unit}${/[aeiouáéíóú]$/i.test(unit) ? "s" : "es"}`;
   }
-  return `${quantity} ${displayedUnit} disponible${quantity === 1 ? "" : "s"}`;
+  const available = locale === "en" ? "available" : quantity === 1 ? "disponible" : "disponibles";
+  return `${formatNumber(locale, quantity)} ${displayedUnit} ${available}`;
 }
 
 export function PublicMap() {
+  const { locale, t } = useI18n();
   const [points, setPoints] = useState<PublicCollectionPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -91,24 +96,24 @@ export function PublicMap() {
     setLoading(true);
     setLoadError("");
     try {
-      const response = await fetch("/api/collection-points", { cache: "no-store" });
+      const response = await fetch(`/api/collection-points?locale=${locale}`, { cache: "no-store" });
       const body = await response.json() as { points?: PublicCollectionPoint[]; message?: string };
-      if (!response.ok) throw new Error(body.message || "No pudimos cargar los puntos ahora.");
+      if (!response.ok) throw new Error(body.message || t("map.loadError"));
       setPoints(body.points ?? []);
       setSelectedPointId((current) => current || body.points?.[0]?.id || "");
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "No pudimos cargar los puntos ahora.");
+      setLoadError(error instanceof Error ? error.message : t("map.loadError"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [locale, t]);
 
   useEffect(() => { void loadPoints(); }, [loadPoints]);
 
   const visiblePoints = useMemo<ListedPoint[]>(() => {
-    const query = normalize(filter);
+    const query = normalize(filter, locale);
     return points
-      .filter((point) => !query || normalize(`${point.name} ${point.neighborhood} ${point.city} ${point.products.map((product) => product.name).join(" ")}`).includes(query))
+      .filter((point) => !query || normalize(`${point.name} ${point.neighborhood} ${point.city} ${point.products.map((product) => product.name).join(" ")}`, locale).includes(query))
       .map((point) => ({
         ...point,
         distanceKm: origin ? haversineKm(origin, { latitude: point.latitude, longitude: point.longitude }) : null,
@@ -116,9 +121,9 @@ export function PublicMap() {
       .sort((a, b) => {
         if (origin) return (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity);
         if (a.isOpen !== b.isOpen) return a.isOpen ? -1 : 1;
-        return a.name.localeCompare(b.name, "es");
+        return a.name.localeCompare(b.name, locale);
       });
-  }, [filter, origin, points]);
+  }, [filter, locale, origin, points]);
 
   useEffect(() => {
     if (!mapReady || !mapsKey || !mapContainer.current) return;
@@ -200,16 +205,16 @@ export function PublicMap() {
 
   function locateMe() {
     if (!navigator.geolocation) {
-      setNotice("Este navegador no ofrece ubicación. Puedes buscar por distrito o barrio.");
+      setNotice(t("map.noLocation"));
       return;
     }
-    setNotice("Solicitando tu ubicación para ordenar los puntos por distancia directa…");
+    setNotice(t("map.locationRequest"));
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setOrigin({ latitude: position.coords.latitude, longitude: position.coords.longitude });
-        setNotice("Distancias calculadas en este dispositivo; no enviamos ni guardamos tu ubicación.");
+        setNotice(t("map.locationReady"));
       },
-      () => setNotice("No recibí tu ubicación. Puedes buscar por distrito o barrio."),
+      () => setNotice(t("map.locationDenied")),
       { enableHighAccuracy: false, timeout: 8_000, maximumAge: 60_000 },
     );
   }
@@ -228,32 +233,32 @@ export function PublicMap() {
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Lima · Perú</p>
-          <h2 id="public-points-title" className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Encuentra ayuda o dónde donar</h2>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Consulta puntos, horarios y disponibilidad confirmada. Las donaciones anunciadas todavía no forman parte del stock.</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">{t("map.locality")}</p>
+          <h2 id="public-points-title" className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">{t("home.title")}</h2>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{t("home.intro")}</p>
         </div>
         <button onClick={locateMe} className="inline-flex items-center justify-center gap-2 rounded-xl border bg-card px-4 py-3 text-sm font-medium hover:bg-muted">
-          <LocateFixed className="size-4" aria-hidden="true" /> Ordenar por cercanía
+          <LocateFixed className="size-4" aria-hidden="true" /> {t("map.locate")}
         </button>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(22rem,0.75fr)]">
         <div className="order-1 overflow-hidden rounded-2xl border bg-card">
           {mapsKey && !mapError ? (
-            <div ref={mapContainer} aria-label="Mapa de puntos de acopio de Lima" role="region" className="h-[280px] w-full bg-muted sm:h-[430px] lg:h-[590px]" />
+            <div ref={mapContainer} aria-label={t("map.region")} role="region" className="h-[280px] w-full bg-muted sm:h-[430px] lg:h-[590px]" />
           ) : (
             <div className="flex h-[280px] flex-col items-center justify-center gap-3 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-50 via-stone-100 to-stone-200 px-6 text-center sm:h-[430px] lg:h-[590px]">
               <span className="grid size-14 place-items-center rounded-2xl bg-white text-primary shadow-sm"><MapPin className="size-7" aria-hidden="true" /></span>
               <div className="max-w-sm">
-                <h3 className="font-semibold">Puntos de acopio en Lima</h3>
-                <p className="mt-1 text-sm text-muted-foreground">{mapError ? "No se pudo iniciar el mapa interactivo. La lista de puntos y sus indicaciones siguen disponibles." : "La lista y las distancias están disponibles. El mapa interactivo se activa al configurar la clave pública de Google Maps."}</p>
+                <h3 className="font-semibold">{t("map.interactiveTitle", { city: selectedPoint?.city ?? "" })}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">{mapError ? t("map.interactiveUnavailable") : t("map.keyHint")}</p>
               </div>
             </div>
           )}
           {selectedPoint && <div className="flex flex-wrap items-center justify-between gap-3 border-t p-4">
             <div><p className="font-semibold">{selectedPoint.name}</p><p className="text-sm text-muted-foreground">{selectedPoint.neighborhood} · {selectedPoint.city}</p></div>
             <a href={directionsUrl(selectedPoint)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">
-              <Navigation className="size-4" aria-hidden="true" /> Abrir en Google Maps
+              <Navigation className="size-4" aria-hidden="true" /> {t("map.openGoogle")}
             </a>
           </div>}
         </div>
@@ -262,48 +267,48 @@ export function PublicMap() {
           <div className="flex gap-2">
             <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border bg-card px-3">
               <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-              <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Distrito, barrio o producto" className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground" />
+              <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder={t("map.searchPlaceholder")} className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground" />
             </label>
-            <button onClick={() => void loadPoints()} disabled={loading} aria-label="Actualizar puntos" className="grid size-11 shrink-0 place-items-center rounded-xl border bg-card hover:bg-muted disabled:opacity-50">
+            <button onClick={() => void loadPoints()} disabled={loading} aria-label={t("map.refresh")} className="grid size-11 shrink-0 place-items-center rounded-xl border bg-card hover:bg-muted disabled:opacity-50">
               <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
             </button>
           </div>
           {notice && <p aria-live="polite" className="text-xs text-muted-foreground">{notice}</p>}
-          {loading && <p className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">Cargando disponibilidad de los puntos…</p>}
-          {!loading && loadError && <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><p>{loadError}</p><button onClick={() => void loadPoints()} className="mt-2 font-medium underline">Intentar de nuevo</button></div>}
-          {!loading && !loadError && visiblePoints.length === 0 && <div className="rounded-xl border bg-card p-5 text-sm text-muted-foreground">{points.length ? "No hay puntos que coincidan con la búsqueda." : "Aún no hay puntos de acopio publicados."}</div>}
+          {loading && <p className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">{t("map.loading")}</p>}
+          {!loading && loadError && <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><p>{loadError}</p><button onClick={() => void loadPoints()} className="mt-2 font-medium underline">{t("map.retry")}</button></div>}
+          {!loading && !loadError && visiblePoints.length === 0 && <div className="rounded-xl border bg-card p-5 text-sm text-muted-foreground">{points.length ? t("map.emptyFiltered") : t("map.empty")}</div>}
           <div className="space-y-3 lg:max-h-[590px] lg:overflow-y-auto lg:pr-1">
             {visiblePoints.map((point) => <article key={point.id} className={`rounded-2xl border bg-card p-4 transition ${selectedPointId === point.id ? "border-primary ring-1 ring-primary/20" : "hover:border-foreground/20"}`}>
               <button onClick={() => selectPoint(point)} className="w-full text-left">
                 <div className="flex items-start justify-between gap-3">
                   <div><h3 className="font-semibold">{point.name}</h3><p className="mt-1 text-sm text-muted-foreground">{point.neighborhood} · {point.city}</p></div>
                   <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${point.isOpen ? "bg-emerald-100 text-emerald-800" : "bg-stone-100 text-stone-600"}`}>
-                    {point.opensAt && point.closesAt ? point.isOpen ? `Abierto · hasta ${formatHour(point.closesAt)}` : `Cerrado · ${formatHour(point.opensAt)}–${formatHour(point.closesAt)}` : "Horario no publicado"}
+                    {point.opensAt && point.closesAt ? point.isOpen ? `${t("map.open")} · ${t("map.until", { time: formatHour(point.closesAt) ?? "" })}` : `${t("map.closed")} · ${formatHour(point.opensAt) ?? ""}–${formatHour(point.closesAt) ?? ""}` : t("map.scheduleUnavailable")}
                   </span>
                 </div>
-                {point.distanceKm !== null && <p className="mt-2 text-xs font-medium text-primary">{point.distanceKm.toFixed(1)} km en distancia directa</p>}
+                {point.distanceKm !== null && <p className="mt-2 text-xs font-medium text-primary">{t("map.distance", { distance: new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(point.distanceKm) })}</p>}
               </button>
               <div className="mt-3 space-y-2 border-t pt-3">
-                {point.products.length === 0 && <p className="text-sm text-muted-foreground">Catálogo del punto pendiente de publicación.</p>}
+                {point.products.length === 0 && <p className="text-sm text-muted-foreground">{t("map.catalogPending")}</p>}
                 {point.products.map((product) => {
                   const shortage = Math.max(0, product.unmetDemandQuantity - product.availableQuantity - product.expectedInboundQuantity);
                   return <div key={product.productId} className="flex flex-wrap items-center justify-between gap-2 text-sm">
                     <span className="font-medium">{product.name}</span>
                     <div className="flex flex-wrap justify-end gap-1.5 text-xs">
-                      {product.availableQuantity > 0 && <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-800">{availabilityLabel(product.availableQuantity, product.unit)}</span>}
-                      {shortage > 0 && <span className="rounded-full bg-orange-50 px-2 py-1 text-orange-800">Déficit: {shortage}</span>}
-                      {product.expectedInboundQuantity > 0 && <span className="rounded-full bg-sky-50 px-2 py-1 text-sky-800">{product.expectedInboundQuantity} anunciado(s), pendiente(s)</span>}
-                      {product.availableQuantity === 0 && shortage === 0 && product.expectedInboundQuantity === 0 && <span className="rounded-full bg-stone-100 px-2 py-1 text-stone-600">Sin stock confirmado</span>}
+                      {product.availableQuantity > 0 && <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-800">{availabilityLabel(product.availableQuantity, product.unit, locale)}</span>}
+                      {shortage > 0 && <span className="rounded-full bg-orange-50 px-2 py-1 text-orange-800">{t("map.shortage", { quantity: formatNumber(locale, shortage) })}</span>}
+                      {product.expectedInboundQuantity > 0 && <span className="rounded-full bg-sky-50 px-2 py-1 text-sky-800">{t("map.inbound", { quantity: formatNumber(locale, product.expectedInboundQuantity) })}</span>}
+                      {product.availableQuantity === 0 && shortage === 0 && product.expectedInboundQuantity === 0 && <span className="rounded-full bg-stone-100 px-2 py-1 text-stone-600">{t("map.noStock")}</span>}
                     </div>
                   </div>;
                 })}
               </div>
               <a href={directionsUrl(point)} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-primary underline-offset-4 hover:underline">
-                <Navigation className="size-3.5" aria-hidden="true" /> Indicaciones
+                <Navigation className="size-3.5" aria-hidden="true" /> {t("map.indications")}
               </a>
             </article>)}
           </div>
-          <p className="text-xs text-muted-foreground">La distancia se calcula en línea directa. Las donaciones anunciadas están pendientes de validación y no se pueden reservar.</p>
+          <p className="text-xs text-muted-foreground">{t("map.distanceDisclaimer")}</p>
         </div>
       </div>
     </section>

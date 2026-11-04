@@ -1,5 +1,7 @@
 import { getAuthenticatedActor } from "@/core/server/auth";
 import { createWhatsAppLink, hasLinkedWhatsApp, unlinkWhatsApp } from "@/services/whatsapp-linking";
+import { parseLocale } from "@/i18n/locale";
+import { translate } from "@/i18n/messages";
 
 export const runtime = "nodejs";
 
@@ -23,10 +25,11 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "invalid_body" }, { status: 400 });
   }
   const consent = Boolean(body && typeof body === "object" && (body as Record<string, unknown>).consent === true);
+  const locale = parseLocale(body && typeof body === "object" ? (body as Record<string, unknown>).locale : undefined) ?? "en";
   try {
-    return Response.json(await createWhatsAppLink(actor.id, consent), { status: 201 });
+    return Response.json(await createWhatsAppLink(actor.id, consent, locale), { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "No se pudo generar el enlace de WhatsApp.";
+    const message = translate(locale, "chat.linkError");
     return Response.json({ error: "whatsapp_link_unavailable", message }, { status: 400 });
   }
 }

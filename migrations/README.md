@@ -14,7 +14,9 @@ El runner toma un advisory lock, comprueba el checksum de versiones ya aplicadas
 
 ## Estado de desarrollo
 
-En `vercel-dev` (`neondb`) están aplicadas `0001-conversation-workflow.sql`, `0002-indivisible-request-lines.sql` y `0003-daily-manifest-expiry.sql`. La segunda agrega guards para cantidades indivisibles; la tercera incorpora el vencimiento local de manifiestos, el estado `EXPIRED` y las funciones SQL compartidas para stock disponible y suministro esperado. `0003` se aplicó el 2026-11-02 mediante `npm run db:migrate` después de verificar que el host directo configurado corresponde al endpoint de `vercel-dev`; Neon confirmó su versión y checksum. La rama `production` no se modificó.
+En `vercel-dev` (`neondb`) están aplicadas `0001`–`0004`. La segunda agrega guards para cantidades indivisibles; la tercera incorpora el vencimiento local de manifiestos, el estado `EXPIRED` y funciones SQL compartidas; la cuarta añade nombres/unidades/alias localizados y preferencia de idioma para vínculos de WhatsApp. `0004` se probó primero en una rama temporal derivada de `vercel-dev` y luego se aplicó mediante `npm run db:migrate` a `vercel-dev` y a la rama Neon vinculada al Preview `preview/codex/grn-mvp-preview-20261104`. Neon confirmó la versión y checksum en ambas ramas. La rama `production` no se modificó.
+
+La aplicación no ejecuta migraciones desde requests ni durante el build de Vercel. Las credenciales de `production` no se usan para esta etapa.
 
 La aplicación de `0001`, `0002` y `0003` usa los archivos versionados y el runner con conexión directa, advisory lock, checksum y transacción por migración. No apliques SQL por separado.
 

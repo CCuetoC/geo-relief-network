@@ -6,6 +6,7 @@ export type UserRole =
   | "administrator";
 
 export type ConversationChannel = "WEB" | "WHATSAPP";
+export type Locale = "en" | "es";
 export type ConversationIntent = "DONATE" | "REQUEST_AID" | "UNKNOWN" | "CANCEL";
 export type MobilityPreference = "NEARBY_ONLY" | "CAN_TRAVEL";
 export type DonorRoutingPreference = "NEAREST" | "GREATEST_NEED";
@@ -41,6 +42,7 @@ export interface PublicCollectionPoint {
 
 export interface ProductLineDraft {
   productName: string;
+  productSlug?: string;
   quantity: number;
   photoMediaIds?: string[];
 }
@@ -52,6 +54,7 @@ export interface AvailabilityWindow {
 
 /** Persist only these extracted slots; never persist raw user text or audio. */
 export interface ConversationState {
+  locale?: Locale;
   intent?: Exclude<ConversationIntent, "UNKNOWN" | "CANCEL">;
   items?: ProductLineDraft[];
   householdSize?: number;
@@ -120,6 +123,7 @@ export interface AssistantPhotoContext {
 export interface ConversationInput {
   conversationId: string;
   channel: ConversationChannel;
+  locale?: Locale;
   actorId?: string;
   text?: string;
   audio?: { base64: string; format: "wav" | "mp3" };
@@ -136,6 +140,7 @@ export interface ConversationActionOption {
 }
 
 export interface ConversationOutput {
+  locale?: Locale;
   text: string;
   phase: "CAPTURING" | "PREVIEW" | "NEEDS_AUTH" | "COMPLETED" | "ERROR";
   conversationId: string;

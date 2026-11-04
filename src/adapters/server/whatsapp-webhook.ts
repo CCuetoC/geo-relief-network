@@ -12,6 +12,9 @@ import {
   getOrCreateWhatsAppConversation,
 } from "@/repositories/whatsapp-inbox-repository";
 import { consumeWhatsAppLinkToken } from "@/services/whatsapp-linking";
+import { getWhatsAppLocale, updateWhatsAppLocale } from "@/services/whatsapp-linking";
+import { inferLocaleFromText } from "@/i18n/locale";
+import { translate } from "@/i18n/messages";
 
 interface InboundMessage {
   id: string;
@@ -54,12 +57,10 @@ function messageParts(message: InboundMessage) {
 async function processMessage(message: InboundMessage, inboxId: string) {
   const parts = messageParts(message);
   if (parts.linkToken) {
-    const linked = await consumeWhatsAppLinkToken(parts.linkToken, message.from);
+    const linkedLocale = await consumeWhatsAppLinkToken(parts.linkToken, message.from);
     await sendWhatsAppText(
       message.from,
-      linked
-        ? "WhatsApp quedó vinculado. Ya puedes usar este chat para solicitar ayuda, preparar donaciones y recibir avisos." 
-        : "El código de vinculación venció o ya fue usado. Inicia sesión en la web y genera un enlace nuevo.",
+      translate(linkedLocale ?? inferLocaleFromText(parts.text), linkedLocale ? "whatsapp.linked" : "whatsapp.linkExpired"),
     );
     await finishWhatsAppMessage(message.id, "PROCESSED");
     return;
@@ -67,11 +68,14 @@ async function processMessage(message: InboundMessage, inboxId: string) {
 
   const actorId = await findWhatsAppActorByLookupHash(hashWhatsAppSender(message.from));
   if (!actorId) {
-    await sendWhatsAppText(message.from, "Para proteger tus solicitudes, primero vincula este número desde la web con tu cuenta Google. Abre /chat e inicia la vinculación.");
+    const locale = inferLocaleFromText(parts.text);
+    await sendWhatsAppText(message.from, translate(locale, "whatsapp.linkFirst"));
     await finishWhatsAppMessage(message.id, "PROCESSED");
     return;
   }
   await associateWhatsAppMessageWithUser(inboxId, actorId);
+  let locale = await getWhatsAppLocale(actorId);
+  if (parts.text) locale = inferLocaleFromText(parts.text, locale);
 
   const conversationId = await getOrCreateWhatsAppConversation(actorId);
   let audio: { base64: string; format: "wav" | "mp3" } | undefined;
@@ -94,7 +98,7 @@ async function processMessage(message: InboundMessage, inboxId: string) {
     } else if (media.contentType === "audio/wav" || media.contentType === "audio/x-wav") {
       audio = { base64: Buffer.from(media.bytes).toString("base64"), format: "wav" };
     } else {
-      await sendWhatsAppText(message.from, "Recibí el audio, pero Muse Spark en este flujo acepta MP3 o WAV. Envíame el mensaje por texto para continuar.");
+      await sendWhatsAppText(message.from, translate(locale, "whatsapp.audioUnsupported"));
       await finishWhatsAppMessage(message.id, "PROCESSED", actorId);
       return;
     }
@@ -108,7 +112,9 @@ async function processMessage(message: InboundMessage, inboxId: string) {
     audio,
     photoMediaIds,
     confirmationDraftId: parts.confirmationDraftId,
+    locale,
   });
+  if (output.locale) await updateWhatsAppLocale(actorId, output.locale);
   await sendWhatsAppText(message.from, output.text, output.actionOptions);
   await finishWhatsAppMessage(message.id, "PROCESSED", actorId);
   await dispatchWhatsAppOutbox({ recipientUserIds: [actorId] }).catch(() => []);
