@@ -18,14 +18,14 @@ export function AppNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur-md">
       <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-2 px-4 py-3 sm:px-8 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
-        <div className="flex items-center justify-between gap-3 lg:shrink-0">
-          <Link href="/" className="flex min-w-0 items-center gap-2.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#0064E0] focus-visible:ring-offset-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 lg:shrink-0">
+          <Link href="/" className="flex shrink-0 items-center gap-2.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#0064E0] focus-visible:ring-offset-2">
             <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#0064E0] text-white shadow-sm" aria-hidden="true">
               <MapPin className="size-5" />
             </span>
-            <span className="truncate text-sm font-semibold tracking-tight text-slate-950 sm:text-base">{t("brand.short")}</span>
+            <span className="whitespace-nowrap text-[13px] font-semibold tracking-tight text-slate-950 sm:text-base">{t("brand.short")}</span>
           </Link>
-          <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-medium text-slate-600 sm:text-xs lg:hidden">
+          <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[9px] font-medium text-slate-600 sm:px-2.5 sm:text-xs lg:hidden">
             {t("brand.poweredBy")}
           </span>
         </div>
