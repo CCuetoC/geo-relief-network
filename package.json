@@ -4,7 +4,7 @@
   "private": true,
   "description": "Red Geoespacial de Respuesta Vecinal (Geospatial Neighborhood Relief Network)",
   "engines": {
-    "node": ">=20.9.0"
+    "node": "24.x"
   },
   "scripts": {
     "dev": "next dev",
