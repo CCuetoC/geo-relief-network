@@ -220,6 +220,24 @@ export function PublicMap() {
   }
 
   const selectedPoint = visiblePoints.find((point) => point.id === selectedPointId);
+  const pointsWithInventoryData = points.filter((point) => point.products.length > 0);
+  const inventoryKpis = pointsWithInventoryData.length > 0 ? [
+    {
+      label: t("map.kpiAvailable"),
+      value: pointsWithInventoryData.filter((point) => point.products.some((product) => product.availableQuantity > 0)).length,
+      tone: "emerald",
+    },
+    {
+      label: t("map.kpiInbound"),
+      value: pointsWithInventoryData.filter((point) => point.products.some((product) => product.expectedInboundQuantity > 0)).length,
+      tone: "amber",
+    },
+    {
+      label: t("map.kpiShortage"),
+      value: pointsWithInventoryData.filter((point) => point.products.some((product) => product.unmetDemandQuantity > product.availableQuantity + product.expectedInboundQuantity)).length,
+      tone: "rose",
+    },
+  ] : [];
 
   return (
     <section aria-labelledby="public-points-title" className="space-y-5">
@@ -233,7 +251,7 @@ export function PublicMap() {
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">{t("map.locality")}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#0064E0]">{t("map.locality")}</p>
           <h2 id="public-points-title" className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">{t("home.title")}</h2>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{t("home.intro")}</p>
         </div>
@@ -242,13 +260,20 @@ export function PublicMap() {
         </button>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(22rem,0.75fr)]">
-        <div className="order-1 overflow-hidden rounded-2xl border bg-card">
+      {inventoryKpis.length > 0 && <div className="grid gap-3 sm:grid-cols-3" aria-label={t("map.inventoryOverview")}>
+        {inventoryKpis.map((kpi) => <article key={kpi.label} className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+          <p className="text-xs font-medium text-slate-500">{kpi.label}</p>
+          <p className={`mt-2 text-3xl font-semibold tracking-tight ${kpi.tone === "emerald" ? "text-emerald-700" : kpi.tone === "amber" ? "text-amber-700" : "text-rose-700"}`}>{formatNumber(locale, kpi.value)}</p>
+        </article>)}
+      </div>}
+
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(22rem,0.75fr)_minmax(0,1.25fr)]">
+        <div className="order-2 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm lg:order-1">
           {mapsKey && !mapError ? (
-            <div ref={mapContainer} aria-label={t("map.region")} role="region" className="h-[280px] w-full bg-muted sm:h-[430px] lg:h-[590px]" />
+            <div ref={mapContainer} aria-label={t("map.region")} role="region" className="min-h-[420px] w-full bg-slate-100 lg:h-[calc(100vh-8rem)]" />
           ) : (
-            <div className="flex h-[280px] flex-col items-center justify-center gap-3 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-50 via-stone-100 to-stone-200 px-6 text-center sm:h-[430px] lg:h-[590px]">
-              <span className="grid size-14 place-items-center rounded-2xl bg-white text-primary shadow-sm"><MapPin className="size-7" aria-hidden="true" /></span>
+            <div className="flex min-h-[420px] flex-col items-center justify-center gap-3 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-50 via-stone-100 to-stone-200 px-6 text-center lg:h-[calc(100vh-8rem)]">
+              <span className="grid size-14 place-items-center rounded-2xl bg-white text-[#0064E0] shadow-sm"><MapPin className="size-7" aria-hidden="true" /></span>
               <div className="max-w-sm">
                 <h3 className="font-semibold">{t("map.interactiveTitle", { city: selectedPoint?.city ?? "" })}</h3>
                 <p className="mt-1 text-sm text-muted-foreground">{mapError ? t("map.interactiveUnavailable") : t("map.keyHint")}</p>
@@ -257,13 +282,13 @@ export function PublicMap() {
           )}
           {selectedPoint && <div className="flex flex-wrap items-center justify-between gap-3 border-t p-4">
             <div><p className="font-semibold">{selectedPoint.name}</p><p className="text-sm text-muted-foreground">{selectedPoint.neighborhood} · {selectedPoint.city}</p></div>
-            <a href={directionsUrl(selectedPoint)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">
+            <a href={directionsUrl(selectedPoint)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg bg-[#0064E0] px-3 py-2 text-sm font-medium text-white">
               <Navigation className="size-4" aria-hidden="true" /> {t("map.openGoogle")}
             </a>
           </div>}
         </div>
 
-        <div className="order-2 flex min-h-0 flex-col gap-3">
+        <div className="order-1 flex min-h-0 flex-col gap-3 lg:order-2">
           <div className="flex gap-2">
             <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border bg-card px-3">
               <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -277,8 +302,8 @@ export function PublicMap() {
           {loading && <p className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">{t("map.loading")}</p>}
           {!loading && loadError && <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><p>{loadError}</p><button onClick={() => void loadPoints()} className="mt-2 font-medium underline">{t("map.retry")}</button></div>}
           {!loading && !loadError && visiblePoints.length === 0 && <div className="rounded-xl border bg-card p-5 text-sm text-muted-foreground">{points.length ? t("map.emptyFiltered") : t("map.empty")}</div>}
-          <div className="space-y-3 lg:max-h-[590px] lg:overflow-y-auto lg:pr-1">
-            {visiblePoints.map((point) => <article key={point.id} className={`rounded-2xl border bg-card p-4 transition ${selectedPointId === point.id ? "border-primary ring-1 ring-primary/20" : "hover:border-foreground/20"}`}>
+          <div className="space-y-3 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto lg:pr-1">
+            {visiblePoints.map((point) => <article key={point.id} className={`rounded-2xl border bg-white p-4 shadow-sm transition ${selectedPointId === point.id ? "border-[#0064E0] ring-1 ring-[#0064E0]/20" : "border-slate-200/80 hover:border-slate-300"}`}>
               <button onClick={() => selectPoint(point)} className="w-full text-left">
                 <div className="flex items-start justify-between gap-3">
                   <div><h3 className="font-semibold">{point.name}</h3><p className="mt-1 text-sm text-muted-foreground">{point.neighborhood} · {point.city}</p></div>
@@ -296,14 +321,14 @@ export function PublicMap() {
                     <span className="font-medium">{product.name}</span>
                     <div className="flex flex-wrap justify-end gap-1.5 text-xs">
                       {product.availableQuantity > 0 && <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-800">{availabilityLabel(product.availableQuantity, product.unit, locale)}</span>}
-                      {shortage > 0 && <span className="rounded-full bg-orange-50 px-2 py-1 text-orange-800">{t("map.shortage", { quantity: formatNumber(locale, shortage) })}</span>}
-                      {product.expectedInboundQuantity > 0 && <span className="rounded-full bg-sky-50 px-2 py-1 text-sky-800">{t("map.inbound", { quantity: formatNumber(locale, product.expectedInboundQuantity) })}</span>}
+                      {shortage > 0 && <span className="rounded-full bg-rose-50 px-2 py-1 text-rose-800">{t("map.shortage", { quantity: formatNumber(locale, shortage) })}</span>}
+                      {product.expectedInboundQuantity > 0 && <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-800">{t("map.inbound", { quantity: formatNumber(locale, product.expectedInboundQuantity) })}</span>}
                       {product.availableQuantity === 0 && shortage === 0 && product.expectedInboundQuantity === 0 && <span className="rounded-full bg-stone-100 px-2 py-1 text-stone-600">{t("map.noStock")}</span>}
                     </div>
                   </div>;
                 })}
               </div>
-              <a href={directionsUrl(point)} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-primary underline-offset-4 hover:underline">
+              <a href={directionsUrl(point)} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-[#0064E0] underline-offset-4 hover:underline">
                 <Navigation className="size-3.5" aria-hidden="true" /> {t("map.indications")}
               </a>
             </article>)}
