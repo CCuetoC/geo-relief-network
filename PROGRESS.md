@@ -1,7 +1,7 @@
 # Geo Relief Network — estado verificable
 
 **Corte de auditoría:** 2026-11-04 (America/Lima)
-**Alcance:** el código bilingüe y el rediseño están en `codex/grn-mvp-preview-20261104`; la Preview se abre y el chat carga. El selector EN/ES ya fue verificado por la persona usuaria. El mapa de Google sigue en fallback y el flujo de interfaz no cuenta con verificación E2E completa. El 2026-11-04 se aplicaron y verificaron las migraciones `0001`–`0004` y los datos sintéticos del punto demo en la rama Neon `production`; el código web de producción aún espera la integración a `main` y su despliegue automático.
+**Alcance:** la integración fue fusionada a `main` el 2026-11-04 en el commit `c68f38c8e9154b408b0971a15d7ec76bfc274a20`; Vercel reportó el deployment de producción como `READY`. La página pública carga el punto demo de Lima y los dos productos con stock cero. El selector EN/ES ya fue verificado por la persona usuaria. El mapa sigue en fallback por falta de configuración de Google Maps y la sesión de producción no pudo verificarse. El flujo de interfaz no cuenta con verificación E2E completa.
 **Criterio:** `DONE` requiere evidencia verificable; `PARTIAL` significa que existe código, pero no está conectado o probado por completo; `NOT STARTED` indica que no existe implementación; `DIVERGED` indica una diferencia intencional o accidental respecto de `SPEC.md`. Un ADR o un archivo existente no demuestra por sí solo que una capacidad funcione.
 
 ## 1. Salud técnica actual (build & checks)
@@ -14,6 +14,7 @@
 | `npm run test:unit` | **Pasó: 10/10** | Incluye cinco pruebas de idioma (precedencia de elección manual, fallback, paridad de diccionarios, alias `water`/`agua` y locale de notificaciones) y cinco de políticas puras. |
 | `npm run test:integration` | **Pasó: 6/6** | Integración ejecutada por `npm test` el 2026-11-04 en `codex-bilingual-migration-20261104`, rama temporal de `vercel-dev`, con migración `0004` y actores sintéticos. |
 | `npm test` | **Pasó: 16/16 (6 integración + 10 unitarias)** | La suite completa pasó contra la misma rama temporal. La rama se eliminó al terminar; la suite no escribió en `vercel-dev`, Preview ni producción. |
+| Deployment de Vercel Production | **READY** | Deployment `dpl_2SDa12rWtEve8VSQRRHssuUVJ5zb`, commit `c68f38c8e9154b408b0971a15d7ec76bfc274a20`. El 2026-11-04 se abrió `https://geo-relief-network.vercel.app/`: lista el punto y catálogo demo, con stock cero; el mapa permanece en fallback y el indicador de sesión mostró “No se pudo verificar”. |
 | Migraciones locales | **Runner completado** | `npm run db:migrate` aplicó `0004-bilingual-localization.sql` por separado a `vercel-dev` y a la rama Neon vinculada a Vercel Preview. Se usó el runner versionado y conexión directa; no SQL ad hoc. |
 | Migraciones en Neon `vercel-dev`, Preview y producción | **`0001`–`0004` aplicadas/verificadas** | Neon confirmó versiones y checksums en `vercel-dev` (`br-rough-cloud-b4ecuruy`), Preview (`br-shy-cherry-b4bvwm7v`) y producción (`br-twilight-bread-b4vkdooz`). En producción, `0002`–`0004` se aplicaron usando el texto exacto de los archivos versionados en transacciones de Neon y se registraron sus checksums; el parser del preparador de migraciones no aceptó el bloque PL/pgSQL de `0002`. |
 
@@ -37,7 +38,8 @@
 ### Estado observado de producción
 
 - En Neon, la rama `production` (`br-twilight-bread-b4vkdooz`) contiene las migraciones registradas `0001`–`0004` con sus checksums. El 2026-11-04 también se cargó `DEMO — Lima Centro`, sus horarios y dos productos bilingües. El stock confirmado de ambos permanece en cero; el script `scripts/seed-demo-production.sql` no reinicia cantidades existentes al repetirse.
-- Esto solo verifica datos y esquema de Neon. El deployment web de producción aún no se actualizó desde el código actual: GitHub `main` sigue pendiente de integración. En Vercel Production no se encontraron configuradas las variables de Neon Auth ni Google Maps; no se ha verificado OAuth ni el mapa en el dominio de producción.
+- La página de producción quedó verificada en el dominio público después del merge. Renderiza el punto demo y los productos con stock cero. El mapa no se inicializa y muestra el fallback de configuración. El indicador de cuenta mostró “No se pudo verificar”; no se verificó OAuth ni las operaciones autenticadas en producción.
+- En Vercel Production no aparecen configuradas las variables `NEON_AUTH_*` ni `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`. No se copiaron valores secretos a esta documentación. Las integraciones externas y los flujos operativos completos siguen sin verificación E2E.
 
 ## 2. Matriz de avance contra `SPEC.md`
 
@@ -108,6 +110,6 @@ Los ADR documentan decisiones; no prueban que la implementación correspondiente
 
 ## 4. Próximos 3 bloques críticos para completar el MVP de la hackatón
 
-1. **Revisar el Preview bilingüe.** Confirmar que el deployment levanta con migración `0004`, selector EN/ES, páginas, chat y vista de encargado; probar la persistencia de la preferencia en escritorio/móvil.
-2. **Completar el rediseño visual acordado.** Trabajar primero navegación/layout, después chat, mapa/lista y panel; mantener contratos y lógica intactos, probar a 1440 y 390 px, y revisar en Preview.
-3. **Cerrar las pruebas de demo que dependan de proveedores.** Verificar Muse y el flujo con las dos cuentas; WhatsApp real es opcional para la demo web y requiere revisar configuración/ventana de 24 horas. No integrar a `main` hasta la revisión final.
+1. **Configurar la experiencia pública de producción.** Añadir y comprobar Google Maps y Neon Auth en Vercel Production; verificar el inicio de sesión y el acceso de encargada sin exponer secretos.
+2. **Completar una revisión E2E de operaciones autenticadas.** Probar manifiesto, validación humana, solicitud, cola y recojo con cuentas controladas; mantener el stock en cero hasta confirmar físicamente una entrega de demo.
+3. **Cerrar los entregables de la hackatón.** Terminar y revisar el video en inglés, con datos ilustrativos rotulados, y confirmar que su duración cumple el límite de la plataforma de publicación.

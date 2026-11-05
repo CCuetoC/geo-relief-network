@@ -7,6 +7,8 @@
 
 [GitHub repository](https://github.com/CCuetoC/geo-relief-network)
 
+[Production demo](https://geo-relief-network.vercel.app/)
+
 ## The idea
 
 During a disaster, one neighborhood may receive more donations than it can use while a nearby area runs short. Geo Relief Network is designed to make local needs and confirmed supplies easier to coordinate, while helping collection points manage arrivals and pickup demand.
@@ -22,7 +24,7 @@ Muse Spark is the conversational layer: it helps interpret messages, collect mis
 
 ## Demo and current status
 
-The current code is on the Vercel Preview branch; its chat page loads and the English/Spanish selector has been verified. Google Maps still shows its setup fallback in Preview. The production database has a Lima demo point and two catalog items, with confirmed stock at zero. The production website remains on the initial scaffold until the code is merged to `main` and the Vercel deployment is verified. Lima is only demo data; the product is intended for communities in different regions.
+The production deployment is available at [geo-relief-network.vercel.app](https://geo-relief-network.vercel.app/). Its public page loads the Lima demo point and two catalog items, both with confirmed stock at zero. The interactive map still shows its setup fallback because the production Google Maps key is not configured, and authentication has not been verified in production. Lima is only demo data; the product is intended for communities in different regions.
 
 The repository contains an inventory engine, bilingual interface, and initial web flows for conversation, donation, and collection point operations. The interface was reviewed at 1440px and 390px browser viewport widths. This does not verify all flows end to end: the interactive map still shows its setup fallback in Preview, and authenticated manager operations have not had a complete UI end-to-end review.
 
@@ -56,8 +58,8 @@ The full `npm test` suite includes database integration tests and requires `GRN_
 
 ## Known limitations
 
-- The Preview’s interactive Google Map is not configured; its setup fallback remains visible. The collection point list and responsive layout were reviewed in a browser, but a physical-device review remains outstanding.
-- Google authentication was verified in the development environment, not production. The manager console requires a manager permission and has not received a full end-to-end UI verification.
+- Google Maps is not configured in production; the page shows the map setup fallback while the public point list and direct Google Maps directions are available. A physical-device review remains outstanding.
+- Google authentication was verified in the development environment, not production; the live page could not verify the current session. The manager console requires manager permission and has not received a full end-to-end UI verification.
 - Live Muse, WhatsApp, audio transcription, and private object storage flows still need verification in their target environment.
 - There is no self-service administration for collection points, catalog items, capacity rules, or manager permissions, and no statistical demand forecast.
 - Pickup availability is collected as a time window; discrete overlapping appointment slots are not implemented.
